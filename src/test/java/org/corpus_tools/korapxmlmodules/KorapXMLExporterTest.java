@@ -12,6 +12,7 @@ import org.corpus_tools.pepper.testFramework.PepperExporterTest;
 import org.corpus_tools.salt.samples.SampleGenerator;
 import org.eclipse.emf.common.util.URI;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -43,45 +44,27 @@ public class KorapXMLExporterTest extends PepperExporterTest {
 		formatDef.setFormatVersion("1.0");
 		this.supportedFormatsCheck.add(formatDef);
 	}
-
-	/**
-	 * This is a test to check the correct work of our dummy implementation.
-	 * This test is supposed to show the usage of JUnit and to give some
-	 * impressions how to check simple things of the created salt model. <br/>
-	 * You can create as many test cases as you like, just create further
-	 * methods having the annotation "@Test". Note that it is very helpful, to
-	 * give them self explaining names and a short JavaDoc explaining their
-	 * purpose. This could help very much, when searching for bugs or extending
-	 * the tests. <br/>
-	 * In our case, we just test, if correct number of corpora and documents was
-	 * created, if all corpora have got a meta-annotation and if each
-	 * document-structure contains the right number of nodes and relations.
-	 */
-	@Test
-	public void test_DummyImplementation() {
-		// create a sample corpus, the class SampleGenerator provides a bunch of
+  
+  @Test
+  public void test_exportCorpusStructure()
+  {
+    // create a sample corpus, the class SampleGenerator provides a bunch of
 		// helpful methods to create sample documents and corpora
 		getFixture().setSaltProject(SampleGenerator.createSaltProject());
 
 		// determine location, to where the corpus should be exported
 		getFixture().setCorpusDesc(new CorpusDesc().setCorpusPath(URI.createFileURI(getTempPath("KorapXMLExporter").getAbsolutePath())));
-
-		// starts the Pepper framework and the conversion process
+  
+    // starts the Pepper framework and the conversion process
 		start();
 
 		File superCorpus = new File(getTempPath("KorapXMLExporter").getAbsolutePath() + "/rootCorpus");
 		assertTrue(superCorpus.exists());
+    
 		File subCorpus1 = new File(superCorpus.getAbsolutePath() + "/subCorpus1");
 		assertTrue(subCorpus1.exists());
-		File document1 = new File(subCorpus1.getAbsolutePath() + "/doc1.dot");
-		assertTrue(document1.exists());
-		File document2 = new File(subCorpus1.getAbsolutePath() + "/doc2.dot");
-		assertTrue(document2.exists());
 		File subCorpus2 = new File(superCorpus.getAbsolutePath() + "/subCorpus2");
-		assertTrue(subCorpus1.exists());
-		File document3 = new File(subCorpus2.getAbsolutePath() + "/doc3.dot");
-		assertTrue(document3.exists());
-		File document4 = new File(subCorpus2.getAbsolutePath() + "/doc4.dot");
-		assertTrue(document4.exists());
-	}
+		assertTrue(subCorpus2.exists());
+  }
+
 }
