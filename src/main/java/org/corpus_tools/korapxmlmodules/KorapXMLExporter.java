@@ -1,11 +1,15 @@
 package org.corpus_tools.korapxmlmodules;
 
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import javax.xml.stream.XMLEventFactory;
+import javax.xml.stream.XMLOutputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamWriter;
 
 import org.corpus_tools.pepper.common.DOCUMENT_STATUS;
 import org.corpus_tools.pepper.common.PepperConfiguration;
@@ -21,12 +25,6 @@ import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.graph.Identifier;
 import org.eclipse.emf.common.util.URI;
-import org.jdom2.Document;
-import org.jdom2.Element;
-import org.jdom2.Namespace;
-import org.jdom2.Text;
-import org.jdom2.output.Format;
-import org.jdom2.output.XMLOutputter;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +40,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 {
 
   private final static Logger log = LoggerFactory.getLogger(KorapXMLExporter.class);
-
+  
+  public static final XMLOutputFactory outputFactory = XMLOutputFactory.newInstance();
+  
   // =================================================== mandatory
   // ===================================================
   /**
@@ -63,6 +63,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     setDocumentEnding("xml");
 
     setExportMode(EXPORT_MODE.CORPORA_ONLY);
+    
+    outputFactory.setProperty(XMLOutputFactory.IS_REPAIRING_NAMESPACES, "true");
   }
 
   /**
@@ -81,9 +83,10 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
   public static class KorapXMLMapper extends PepperMapperImpl
   {
 
-    public static final Namespace NS = Namespace.getNamespace("http://ids-mannheim.de/ns/KorAP");
+    public static final String NS_URI = "http://ids-mannheim.de/ns/KorAP";
     public static final String KORAP_VERSION = "KorAP-0.4";
 
+    
     /**
      * Stores each document-structure to location given by {@link #getResourceURI()}.
      */
@@ -110,25 +113,38 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
     private void mapText(File docDir)
     {
-      try (FileWriter dataXMLWriter = new FileWriter(new File(docDir, "data.xml")))
+      
+
+      try (
+        FileOutputStream dataXMLStream = new FileOutputStream(new File(docDir, "data.xml")))
       {
-        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
+        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(dataXMLStream, "UTF-8");
 
-        Document dataXML = new Document(new Element("raw_text", NS)
-          .setAttribute("docid", getDocument().getId()));
-
-        String rawText = "";
+        xml.writeStartDocument("UTF-8", "1.0");
+        xml.setDefaultNamespace(NS_URI);
+        
+        xml.writeStartElement(NS_URI, "raw_text");
+        
+        xml.writeAttribute("docid", getDocument().getId());
+        
+        String textContent = "";
         if (getDocument().getDocumentGraph().getTextualDSs() != null
           && !getDocument().getDocumentGraph().getTextualDSs().isEmpty())
         {
-          rawText = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
+          textContent = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
         }
-
-        dataXML.getRootElement().addContent(new Element("text", NS).setContent(new Text(rawText)));
-
-        outputter.output(dataXML, dataXMLWriter);
+        
+        xml.writeStartElement(NS_URI, "text");
+        xml.writeCharacters(textContent);
+        xml.writeEndElement(); // end "text"
+        xml.writeEndElement(); // end "raw_text"
+        xml.writeEndDocument();
+        
+        xml.flush();
+        xml.close();
+        
       }
-      catch (IOException ex)
+      catch (IOException | XMLStreamException ex)
       {
         log.error("Could not create file \"data.xml\" for document " + getResourceURI(), ex);
       }
@@ -137,39 +153,56 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     private void mapToken(File docDir)
     {
       File baseDir = new File(docDir, "base");
-      if(!baseDir.exists())
+      if (!baseDir.exists())
       {
-        if(!baseDir.exists() && !baseDir.mkdirs())
+        if (!baseDir.exists() && !baseDir.mkdirs())
         {
           log.error("Can't create output folder for token file.");
           return;
-          
+
         }
       }
-      try (FileWriter tokenXMLWriter = new FileWriter(new File(baseDir, "token.xml")))
+      try (FileOutputStream tokenXMLStream = new FileOutputStream(new File(baseDir, "token.xml")))
       {
-        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
-
-        Document tokenXML = new Document(new Element("layer", NS)
-          .setAttribute("docid", getDocument().getId())
-          .setAttribute("version", KORAP_VERSION));
-
-        Element spanList = new Element("spanList", NS);
-        tokenXML.getRootElement().addContent(spanList);
-
+        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
+        xml.writeStartDocument("UTF-8", "1.0");
+        xml.setDefaultNamespace(NS_URI);
+        
+        xml.writeStartElement(NS_URI, "layer");
+        xml.writeAttribute("docid", getDocument().getId());
+        xml.writeAttribute("version", KORAP_VERSION);
+        
+        xml.writeStartElement(NS_URI, "spanList");
+        
         getDocument().getDocumentGraph().getTextualRelations().forEach((textRel) ->
         {
           SToken tok = textRel.getSource();
 
-          spanList.addContent(new Element("span", NS)
-            .setAttribute("id", tok.getPath().fragment())
-            .setAttribute("from", "" + textRel.getStart())
-            .setAttribute("to", "" + textRel.getEnd()));
+          try
+          {
+            xml.writeStartElement(NS_URI, "span");
+            xml.writeAttribute("id", tok.getPath().fragment());
+            xml.writeAttribute("from", "" + textRel.getStart());
+            xml.writeAttribute("to", "" + textRel.getEnd());
+            xml.writeEndElement(); // end span
+          }
+          catch(XMLStreamException ex)
+          {
+            log.error("Could not map token " + tok.getId(), ex);
+          }
         });
+        
+        xml.writeEndElement(); // end "spanList"
+        xml.writeEndElement(); // end "layer"
+        xml.writeEndDocument();
+        
+        xml.flush();
+        xml.close();
+        
+        
 
-        outputter.output(tokenXML, tokenXMLWriter);
       }
-      catch (IOException ex)
+      catch (IOException | XMLStreamException ex)
       {
         log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
       }

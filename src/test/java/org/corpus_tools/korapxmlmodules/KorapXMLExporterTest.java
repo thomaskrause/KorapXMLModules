@@ -1,6 +1,5 @@
 package org.corpus_tools.korapxmlmodules;
 
-import org.corpus_tools.korapxmlmodules.KorapXMLExporter;
 
 import static org.junit.Assert.assertTrue;
 
@@ -12,7 +11,6 @@ import org.corpus_tools.pepper.testFramework.PepperExporterTest;
 import org.corpus_tools.salt.samples.SampleGenerator;
 import org.eclipse.emf.common.util.URI;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 /**
