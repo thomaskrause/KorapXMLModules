@@ -1,6 +1,7 @@
 package org.corpus_tools.korapxmlmodules;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -15,31 +16,22 @@ import org.corpus_tools.pepper.modules.PepperMapper;
 import org.corpus_tools.pepper.modules.PepperModule;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.exceptions.PepperModuleNotReadyException;
-import org.corpus_tools.salt.common.SCorpusDocumentRelation;
 import org.corpus_tools.salt.common.SCorpusGraph;
-import org.corpus_tools.salt.common.SDocument;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.graph.Identifier;
 import org.corpus_tools.salt.util.SaltUtil;
 import org.eclipse.emf.common.util.URI;
 import org.jdom2.Document;
-import org.jdom2.JDOMException;
-import org.jdom2.input.SAXBuilder;
+import org.jdom2.Element;
+import org.jdom2.Text;
+import org.jdom2.output.Format;
+import org.jdom2.output.XMLOutputter;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * This class is a dummy implementation of a {@link PepperExporter} to show how an exporter works in general. This
- * implementation can be used as a template for an own module. Therefore adapt the TODO's. <br/>
- * This dummy implementation just exports the corpus-structure and document-structure to dot formatted files. The dot
- * format is a mechanism to store graph based data for visualizing them. With the tool GraphViz, such a graph could be
- * converted to a png, svg ... file. For more information about dot and GraphViz, see: http://www.graphviz.org/.
- *
- * If this is the first time, you are implementing a Pepper module, we strongly recommend, to take a look into the
- * 'Developer's Guide for Pepper modules', you will find on
- * <a href="http://corpus-tools.org/pepper/">http://corpus-tools.org/pepper</a>.
- *
+ * 
  * @author Thomas Krause
  */
 //@formatter:off
@@ -69,7 +61,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     addSupportedFormat("KorapXML", "1.0", null);
     setDocumentEnding("xml");
 
-    setExportMode(EXPORT_MODE.DOCUMENTS_IN_FILES);
+    setExportMode(EXPORT_MODE.CORPORA_ONLY);
   }
 
   /**
@@ -97,13 +89,26 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       // workaround to deal with a bug in Salt
       SCorpusGraph sCorpusGraph = getDocument().getGraph();
 
-      SAXBuilder builder = new SAXBuilder();
-      try
-      {
-        Document xml = builder.build(new File(getResourceURI().toFileString()));
+      File docDir = new File(getResourceURI().toFileString());
 
+      try(FileWriter dataXMLWriter = new FileWriter(new File(docDir, "data.xml")))
+      {
+        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
+       
+        Document dataXML = new Document(new Element("raw_text"));
+        
+        String rawText = "";
+        if(getDocument().getDocumentGraph().getTextualDSs() != null
+          && !getDocument().getDocumentGraph().getTextualDSs().isEmpty())
+        {
+          rawText = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
+        }
+        
+        dataXML.getRootElement().addContent(new Element("text").setContent(new Text(rawText)));
+        
+        outputter.output(dataXML, dataXMLWriter);
       }
-      catch (JDOMException | IOException ex)
+      catch (IOException ex)
       {
         log.error("Could not create XML for document " + getResourceURI(), ex);
       }
@@ -129,7 +134,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       {
         if (getCorpus().equals(roots.get(0)))
         {
-          SaltUtil.save_DOT(getCorpus().getGraph(), getResourceURI());
+//          SaltUtil.save_DOT(getCorpus().getGraph(), getResourceURI());
         }
       }
 
@@ -145,9 +150,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
     // add a folder for each document
     Collection<SCorpusGraph> corpGraphs = new LinkedList<>(this.getSaltProject().getCorpusGraphs());
-    for (SCorpusGraph cg : corpGraphs)
+    corpGraphs.forEach((cg) ->
     {
-      for(SCorpusDocumentRelation rel : cg.getCorpusDocumentRelations())
+      cg.getCorpusDocumentRelations().forEach((rel) ->
       {
         URI parentLocation = getIdentifier2ResourceTable().get(rel.getSource().getIdentifier());
         File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName());
@@ -160,8 +165,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
         {
           logger.error("Could not create output directory {}", docFolder.getAbsolutePath());
         }
-      }
-    }
+      });
+    });
   }
 
   // =================================================== optional

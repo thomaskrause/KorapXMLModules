@@ -63,8 +63,23 @@ public class KorapXMLExporterTest extends PepperExporterTest {
     
 		File subCorpus1 = new File(superCorpus.getAbsolutePath() + "/subCorpus1");
 		assertTrue(subCorpus1.exists());
+    assertTrue(subCorpus1.isDirectory());
 		File subCorpus2 = new File(superCorpus.getAbsolutePath() + "/subCorpus2");
 		assertTrue(subCorpus2.exists());
+    assertTrue(subCorpus2.isDirectory());
+    
+    File doc1 = new File(subCorpus1, "doc1");
+    assertTrue(doc1.isDirectory());
+    
+    File doc2 = new File(subCorpus1, "doc2");
+    assertTrue(doc2.isDirectory());
+    
+    File doc3 = new File(subCorpus2, "doc3");
+    assertTrue(doc3.isDirectory());
+    
+    File doc4 = new File(subCorpus2, "doc4");
+    assertTrue(doc4.isDirectory());
+    
   }
 
 }
