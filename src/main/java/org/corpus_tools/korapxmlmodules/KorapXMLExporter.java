@@ -17,12 +17,13 @@ import org.corpus_tools.pepper.modules.PepperModule;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.exceptions.PepperModuleNotReadyException;
 import org.corpus_tools.salt.common.SCorpusGraph;
+import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.graph.Identifier;
-import org.corpus_tools.salt.util.SaltUtil;
 import org.eclipse.emf.common.util.URI;
 import org.jdom2.Document;
 import org.jdom2.Element;
+import org.jdom2.Namespace;
 import org.jdom2.Text;
 import org.jdom2.output.Format;
 import org.jdom2.output.XMLOutputter;
@@ -31,7 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 
+ *
  * @author Thomas Krause
  */
 //@formatter:off
@@ -80,6 +81,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
   public static class KorapXMLMapper extends PepperMapperImpl
   {
 
+    public static final Namespace NS = Namespace.getNamespace("http://ids-mannheim.de/ns/KorAP");
+    public static final String KORAP_VERSION = "KorAP-0.4";
+
     /**
      * Stores each document-structure to location given by {@link #getResourceURI()}.
      */
@@ -91,27 +95,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
       File docDir = new File(getResourceURI().toFileString());
 
-      try(FileWriter dataXMLWriter = new FileWriter(new File(docDir, "data.xml")))
-      {
-        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
-       
-        Document dataXML = new Document(new Element("raw_text"));
-        
-        String rawText = "";
-        if(getDocument().getDocumentGraph().getTextualDSs() != null
-          && !getDocument().getDocumentGraph().getTextualDSs().isEmpty())
-        {
-          rawText = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
-        }
-        
-        dataXML.getRootElement().addContent(new Element("text").setContent(new Text(rawText)));
-        
-        outputter.output(dataXML, dataXMLWriter);
-      }
-      catch (IOException ex)
-      {
-        log.error("Could not create XML for document " + getResourceURI(), ex);
-      }
+      mapText(docDir);
+      mapToken(docDir);
 
       // workaround to deal with a bug in Salt
       if (getDocument().getGraph() == null)
@@ -121,6 +106,73 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
       addProgress(1.0);
       return (DOCUMENT_STATUS.COMPLETED);
+    }
+
+    private void mapText(File docDir)
+    {
+      try (FileWriter dataXMLWriter = new FileWriter(new File(docDir, "data.xml")))
+      {
+        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
+
+        Document dataXML = new Document(new Element("raw_text", NS)
+          .setAttribute("docid", getDocument().getId()));
+
+        String rawText = "";
+        if (getDocument().getDocumentGraph().getTextualDSs() != null
+          && !getDocument().getDocumentGraph().getTextualDSs().isEmpty())
+        {
+          rawText = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
+        }
+
+        dataXML.getRootElement().addContent(new Element("text", NS).setContent(new Text(rawText)));
+
+        outputter.output(dataXML, dataXMLWriter);
+      }
+      catch (IOException ex)
+      {
+        log.error("Could not create file \"data.xml\" for document " + getResourceURI(), ex);
+      }
+    }
+
+    private void mapToken(File docDir)
+    {
+      File baseDir = new File(docDir, "base");
+      if(!baseDir.exists())
+      {
+        if(!baseDir.exists() && !baseDir.mkdirs())
+        {
+          log.error("Can't create output folder for token file.");
+          return;
+          
+        }
+      }
+      try (FileWriter tokenXMLWriter = new FileWriter(new File(baseDir, "token.xml")))
+      {
+        XMLOutputter outputter = new XMLOutputter(Format.getPrettyFormat());
+
+        Document tokenXML = new Document(new Element("layer", NS)
+          .setAttribute("docid", getDocument().getId())
+          .setAttribute("version", KORAP_VERSION));
+
+        Element spanList = new Element("spanList", NS);
+        tokenXML.getRootElement().addContent(spanList);
+
+        getDocument().getDocumentGraph().getTextualRelations().forEach((textRel) ->
+        {
+          SToken tok = textRel.getSource();
+
+          spanList.addContent(new Element("span", NS)
+            .setAttribute("id", tok.getPath().fragment())
+            .setAttribute("from", "" + textRel.getStart())
+            .setAttribute("to", "" + textRel.getEnd()));
+        });
+
+        outputter.output(tokenXML, tokenXMLWriter);
+      }
+      catch (IOException ex)
+      {
+        log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
+      }
     }
 
     /**
@@ -156,9 +208,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       {
         URI parentLocation = getIdentifier2ResourceTable().get(rel.getSource().getIdentifier());
         File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName());
-        if(docFolder.mkdirs())
+        if (docFolder.exists() || docFolder.mkdirs())
         {
-          getIdentifier2ResourceTable().put(rel.getTarget().getIdentifier(), 
+          getIdentifier2ResourceTable().put(rel.getTarget().getIdentifier(),
             URI.createFileURI(docFolder.getAbsolutePath()));
         }
         else
