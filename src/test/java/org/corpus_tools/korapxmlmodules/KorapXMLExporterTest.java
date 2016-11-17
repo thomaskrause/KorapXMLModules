@@ -39,7 +39,7 @@ public class KorapXMLExporterTest extends PepperExporterTest {
 		setFixture(new KorapXMLExporter());
 
 		FormatDesc formatDef = new FormatDesc();
-		formatDef.setFormatName("dot");
+		formatDef.setFormatName("KorapXML");
 		formatDef.setFormatVersion("1.0");
 		this.supportedFormatsCheck.add(formatDef);
 	}
