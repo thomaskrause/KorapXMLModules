@@ -13,6 +13,7 @@ import javax.xml.stream.XMLStreamWriter;
 
 import org.corpus_tools.pepper.common.DOCUMENT_STATUS;
 import org.corpus_tools.pepper.common.PepperConfiguration;
+import org.corpus_tools.pepper.exceptions.PepperConvertException;
 import org.corpus_tools.pepper.impl.PepperExporterImpl;
 import org.corpus_tools.pepper.impl.PepperMapperImpl;
 import org.corpus_tools.pepper.modules.PepperExporter;
@@ -21,6 +22,8 @@ import org.corpus_tools.pepper.modules.PepperModule;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.exceptions.PepperModuleNotReadyException;
 import org.corpus_tools.salt.common.SCorpusGraph;
+import org.corpus_tools.salt.common.SDocument;
+import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.graph.Identifier;
@@ -98,8 +101,17 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
       File docDir = new File(getResourceURI().toFileString());
 
-      mapText(docDir);
-      mapToken(docDir);
+      getDocument().getDocumentGraph().getTextualDSs().forEach((text) ->
+      {
+        File textDir = new File(docDir, text.getName().replaceAll("[._]", ""));
+        if(!textDir.exists() && !textDir.mkdirs())
+        {
+          throw new PepperConvertException("Can't create directory " + textDir.getAbsolutePath());
+        }
+        mapText(textDir, text);
+        mapToken(textDir, text);
+        
+      });
 
       // workaround to deal with a bug in Salt
       if (getDocument().getGraph() == null)
@@ -110,13 +122,27 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       addProgress(1.0);
       return (DOCUMENT_STATUS.COMPLETED);
     }
+    
+    private String getDocID(STextualDS text)
+    {
+      String textName = text.getName();
+      String[] docPath = getDocument().getPath().segments();
+      
+      if(docPath.length >= 2)
+      {
+        return docPath[0].replaceAll("[._]", "") + "_" + docPath[docPath.length-1].replaceAll("[._]", "") + "." + textName.replaceAll("[._]", "");
+      }
+      else
+      {
+        throw new PepperConvertException("Can't generate a valid document ID because the corpus path is invalid.");
+      }
+    }
 
-    private void mapText(File docDir)
+    private void mapText(File textDir, STextualDS text)
     {
       
-
       try (
-        FileOutputStream dataXMLStream = new FileOutputStream(new File(docDir, "data.xml")))
+        FileOutputStream dataXMLStream = new FileOutputStream(new File(textDir, "data.xml")))
       {
         XMLStreamWriter xml = outputFactory.createXMLStreamWriter(dataXMLStream, "UTF-8");
 
@@ -125,14 +151,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
         
         xml.writeStartElement(NS_URI, "raw_text");
         
-        xml.writeAttribute("docid", getDocument().getId());
+        xml.writeAttribute("docid", getDocID(text));
         
-        String textContent = "";
-        if (getDocument().getDocumentGraph().getTextualDSs() != null
-          && !getDocument().getDocumentGraph().getTextualDSs().isEmpty())
-        {
-          textContent = getDocument().getDocumentGraph().getTextualDSs().get(0).getText();
-        }
+        String textContent = text.getText();
         
         xml.writeStartElement(NS_URI, "text");
         xml.writeCharacters(textContent);
@@ -150,9 +171,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       }
     }
 
-    private void mapToken(File docDir)
+    private void mapToken(File textDir, STextualDS text)
     {
-      File baseDir = new File(docDir, "base");
+      File baseDir = new File(textDir, "base");
       if (!baseDir.exists())
       {
         if (!baseDir.exists() && !baseDir.mkdirs())
@@ -169,26 +190,29 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
         xml.setDefaultNamespace(NS_URI);
         
         xml.writeStartElement(NS_URI, "layer");
-        xml.writeAttribute("docid", getDocument().getId());
+        xml.writeAttribute("docid", getDocID(text));
         xml.writeAttribute("version", KORAP_VERSION);
         
         xml.writeStartElement(NS_URI, "spanList");
         
         getDocument().getDocumentGraph().getTextualRelations().forEach((textRel) ->
         {
+          if(textRel.getTarget() == text)
+          {
           SToken tok = textRel.getSource();
 
-          try
-          {
-            xml.writeStartElement(NS_URI, "span");
-            xml.writeAttribute("id", tok.getPath().fragment());
-            xml.writeAttribute("from", "" + textRel.getStart());
-            xml.writeAttribute("to", "" + textRel.getEnd());
-            xml.writeEndElement(); // end span
-          }
-          catch(XMLStreamException ex)
-          {
-            log.error("Could not map token " + tok.getId(), ex);
+            try
+            {
+              xml.writeStartElement(NS_URI, "span");
+              xml.writeAttribute("id", tok.getPath().fragment());
+              xml.writeAttribute("from", "" + textRel.getStart());
+              xml.writeAttribute("to", "" + textRel.getEnd());
+              xml.writeEndElement(); // end span
+            }
+            catch(XMLStreamException ex)
+            {
+              log.error("Could not map token " + tok.getId(), ex);
+            }
           }
         });
         
@@ -240,7 +264,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       cg.getCorpusDocumentRelations().forEach((rel) ->
       {
         URI parentLocation = getIdentifier2ResourceTable().get(rel.getSource().getIdentifier());
-        File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName());
+        File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName().replaceAll("[._]", ""));
         if (docFolder.exists() || docFolder.mkdirs())
         {
           getIdentifier2ResourceTable().put(rel.getTarget().getIdentifier(),
