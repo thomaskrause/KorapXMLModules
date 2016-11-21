@@ -1,5 +1,7 @@
 package org.corpus_tools.korapxmlmodules;
 
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -9,6 +11,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -25,12 +28,14 @@ import org.corpus_tools.pepper.modules.PepperModule;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.exceptions.PepperModuleNotReadyException;
 import org.corpus_tools.salt.SALT_TYPE;
-import org.corpus_tools.salt.SaltFactory;
 import org.corpus_tools.salt.common.SCorpusGraph;
 import org.corpus_tools.salt.common.SSpan;
+import org.corpus_tools.salt.common.SSpanningRelation;
 import org.corpus_tools.salt.common.STextualDS;
+import org.corpus_tools.salt.common.STextualRelation;
 import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SNode;
+import org.corpus_tools.salt.core.SRelation;
 import org.corpus_tools.salt.graph.Identifier;
 import org.corpus_tools.salt.util.DataSourceSequence;
 import org.eclipse.emf.common.util.URI;
@@ -45,372 +50,345 @@ import org.slf4j.LoggerFactory;
 //@formatter:off
 @Component(name = "KorapXMLExporterComponent", factory = "PepperExporterComponentFactory")
 //@formatter:on
-public class KorapXMLExporter extends PepperExporterImpl implements PepperExporter
-{
+public class KorapXMLExporter extends PepperExporterImpl implements PepperExporter {
 
-  private final static Logger log = LoggerFactory.getLogger(KorapXMLExporter.class);
+	private final static Logger log = LoggerFactory.getLogger(KorapXMLExporter.class);
 
-  public static final XMLOutputFactory outputFactory = XMLOutputFactory.newInstance();
+	public static final XMLOutputFactory outputFactory = XMLOutputFactory.newInstance();
 
-  // =================================================== mandatory
-  // ===================================================
-  /**
-   * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
-   *
-   * A constructor for your module. Set the coordinates, with which your module shall be registered. The coordinates
-   * (modules name, version and supported formats) are a kind of a fingerprint, which should make your module unique.
-   */
-  public KorapXMLExporter()
-  {
-    super();
-    setName("KorapXMLExporter");
-    setSupplierContact(URI.createURI(PepperConfiguration.EMAIL));
-    setSupplierHomepage(URI.createURI(PepperConfiguration.HOMEPAGE));
-    setDesc("The exporter exports the corpus into a format named KorapXML as used by the Korap system "
-      + "(see: http://github.org/korap/).");
-    addSupportedFormat("KorapXML", "1.0", null);
-    setDocumentEnding("xml");
+	// =================================================== mandatory
+	// ===================================================
+	/**
+	 * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
+	 *
+	 * A constructor for your module. Set the coordinates, with which your
+	 * module shall be registered. The coordinates (modules name, version and
+	 * supported formats) are a kind of a fingerprint, which should make your
+	 * module unique.
+	 */
+	public KorapXMLExporter() {
+		super();
+		setName("KorapXMLExporter");
+		setSupplierContact(URI.createURI(PepperConfiguration.EMAIL));
+		setSupplierHomepage(URI.createURI(PepperConfiguration.HOMEPAGE));
+		setDesc("The exporter exports the corpus into a format named KorapXML as used by the Korap system "
+				+ "(see: http://github.org/korap/).");
+		addSupportedFormat("KorapXML", "1.0", null);
+		setDocumentEnding("xml");
 
-    setExportMode(EXPORT_MODE.CORPORA_ONLY);
+		setExportMode(EXPORT_MODE.CORPORA_ONLY);
 
-    setProperties(new KorapXMLExporterProperties());
+		setProperties(new KorapXMLExporterProperties());
 
-    outputFactory.setProperty(XMLOutputFactory.IS_REPAIRING_NAMESPACES, "true");
+		outputFactory.setProperty(XMLOutputFactory.IS_REPAIRING_NAMESPACES, "true");
 
-  }
+	}
 
-  /**
-   * This method creates a {@link PepperMapper}. <br/>
-   * In this dummy implementation an instance of {@link KorapXMLMapper} is created and its location to where the
-   * document-structure should be exported to is set.
-   */
-  @Override
-  public PepperMapper createPepperMapper(Identifier Identifier)
-  {
-    PepperMapper mapper = new KorapXMLMapper();
-    mapper.setResourceURI(getIdentifier2ResourceTable().get(Identifier));
-    return (mapper);
-  }
+	/**
+	 * This method creates a {@link PepperMapper}. <br/>
+	 * In this dummy implementation an instance of {@link KorapXMLMapper} is
+	 * created and its location to where the document-structure should be
+	 * exported to is set.
+	 */
+	@Override
+	public PepperMapper createPepperMapper(Identifier Identifier) {
+		PepperMapper mapper = new KorapXMLMapper();
+		mapper.setResourceURI(getIdentifier2ResourceTable().get(Identifier));
+		return (mapper);
+	}
 
-  public static class KorapXMLMapper extends PepperMapperImpl
-  {
+	public static class KorapXMLMapper extends PepperMapperImpl {
 
-    public static final String NS_URI = "http://ids-mannheim.de/ns/KorAP";
-    public static final String KORAP_VERSION = "KorAP-0.4";
+		public static final String NS_URI = "http://ids-mannheim.de/ns/KorAP";
+		public static final String KORAP_VERSION = "KorAP-0.4";
 
-    /**
-     * Stores each document-structure to location given by {@link #getResourceURI()}.
-     */
-    @Override
-    public DOCUMENT_STATUS mapSDocument()
-    {
-      // workaround to deal with a bug in Salt
-      SCorpusGraph sCorpusGraph = getDocument().getGraph();
+		private static class AnnoSpanPair {
 
-      File docDir = new File(getResourceURI().toFileString());
+			final String anno;
+			final SSpan span;
 
-      getDocument().getDocumentGraph().getTextualDSs().forEach((text) ->
-      {
-        File textDir = new File(docDir, text.getName().replaceAll("[._]", ""));
-        if (!textDir.exists() && !textDir.mkdirs())
-        {
-          throw new PepperConvertException("Can't create directory " + textDir.getAbsolutePath());
-        }
-        mapText(textDir, text);
-        mapToken(textDir, text);
+			public AnnoSpanPair(String anno, SSpan span) {
+				this.anno = anno;
+				this.span = span;
+			}
+		}
 
-        Map<String, Set<SSpan>> spansByAnnoQName = new HashMap<>();
-        
-        DataSourceSequence<Integer> wholeTextSequence = new DataSourceSequence<>();
-        wholeTextSequence.setDataSource(text);
-        wholeTextSequence.setStart(text.getStart());
-        wholeTextSequence.setEnd(text.getEnd());
-        
-        String sentenceAnno = getProperties().getSentenceAnnotationQName();
-        
-        List<SSpan> spans = getDocument().getDocumentGraph().getSpansBySequence(wholeTextSequence);
-        
-        // TODO: filter spans by correct text
-        // map all sentence spans
-        List<SSpan> sentenceSpans = spans.parallelStream()
-          .filter(s -> s.getAnnotation(sentenceAnno) != null)
-          .collect(Collectors.toList());
-        mapSpans(textDir, "base", "sentences", sentenceSpans, text);
+		/**
+		 * Stores each document-structure to location given by
+		 * {@link #getResourceURI()}.
+		 */
+		@Override
+		public DOCUMENT_STATUS mapSDocument() {
+			// workaround to deal with a bug in Salt
+			SCorpusGraph sCorpusGraph = getDocument().getGraph();
 
-        // map all paragraph spans
-        String paragraphAnno = getProperties().getParagraphAnnotationQName();
-        List<SSpan> paragraphSpans = spans.parallelStream()
-          .filter(s -> s.getAnnotation(paragraphAnno) != null)
-          .collect(Collectors.toList());
-        mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
+			File docDir = new File(getResourceURI().toFileString());
 
-        // TODO: map all other spans
-      });
+			getDocument().getDocumentGraph().getTextualDSs().forEach((text)
+					-> {
+				File textDir = new File(docDir, text.getName().replaceAll("[._]", ""));
+				if (!textDir.exists() && !textDir.mkdirs()) {
+					throw new PepperConvertException("Can't create directory " + textDir.getAbsolutePath());
+				}
+				mapText(textDir, text);
+				mapToken(textDir, text);
 
-      // workaround to deal with a bug in Salt
-      if (getDocument().getGraph() == null)
-      {
-        getDocument().setGraph(sCorpusGraph);
-      }
+				DataSourceSequence<Integer> wholeTextSequence = new DataSourceSequence<>();
+				wholeTextSequence.setDataSource(text);
+				wholeTextSequence.setStart(text.getStart());
+				wholeTextSequence.setEnd(text.getEnd());
 
-      addProgress(1.0);
-      return (DOCUMENT_STATUS.COMPLETED);
-    }
+				Predicate<? super SRelation> textRelConnectedToText
+						= rel -> rel instanceof STextualRelation && rel.getTarget() == text;
+				Predicate<? super SRelation> spanRelConnectedToText
+						= rel -> rel instanceof SSpanningRelation
+						&& ((SSpanningRelation) rel).getTarget().getOutRelations().stream().anyMatch(textRelConnectedToText);
 
-    private String getDocID(STextualDS text)
-    {
-      String textName = text.getName();
-      String[] docPath = getDocument().getPath().segments();
+				Multimap<String, SSpan> spansByAnnoQName = HashMultimap.create();
 
-      if (docPath.length >= 2)
-      {
-        return docPath[0].replaceAll("[._]", "") + "_" + docPath[docPath.length - 1].replaceAll("[._]", "") + "." + textName.replaceAll("[._]", "");
-      }
-      else
-      {
-        throw new PepperConvertException("Can't generate a valid document ID because the corpus path is invalid.");
-      }
-    }
+				getDocument().getDocumentGraph().getSpans().parallelStream()
+						.filter(span -> span.getOutRelations().stream().anyMatch(spanRelConnectedToText))
+						.forEach(span -> span.getAnnotations().forEach(anno -> spansByAnnoQName.put(anno.getQName(), span)));
 
-    private void mapText(File textDir, STextualDS text)
-    {
+				// map all sentence spans
+				Collection<SSpan> sentenceSpans = spansByAnnoQName
+						.get(getProperties().getSentenceAnnotationQName());
+				mapSpans(textDir, "base", "sentences", sentenceSpans, text);
 
-      try (
-        FileOutputStream dataXMLStream = new FileOutputStream(new File(textDir, "data.xml")))
-      {
-        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(dataXMLStream, "UTF-8");
+				// map all paragraph spans
+				Collection<SSpan> paragraphSpans = spansByAnnoQName
+						.get(getProperties().getParagraphAnnotationQName());
+				mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
 
-        xml.writeStartDocument("UTF-8", "1.0");
-        xml.setDefaultNamespace(NS_URI);
+				// TODO: map all other spans
+			});
 
-        xml.writeStartElement(NS_URI, "raw_text");
+			// workaround to deal with a bug in Salt
+			if (getDocument().getGraph() == null) {
+				getDocument().setGraph(sCorpusGraph);
+			}
 
-        xml.writeAttribute("docid", getDocID(text));
+			addProgress(1.0);
+			return (DOCUMENT_STATUS.COMPLETED);
+		}
 
-        String textContent = text.getText();
+		private String getDocID(STextualDS text) {
+			String textName = text.getName();
+			String[] docPath = getDocument().getPath().segments();
 
-        xml.writeStartElement(NS_URI, "text");
-        xml.writeCharacters(textContent);
-        xml.writeEndElement(); // end "text"
-        xml.writeEndElement(); // end "raw_text"
-        xml.writeEndDocument();
+			if (docPath.length >= 2) {
+				return docPath[0].replaceAll("[._]", "") + "_" + docPath[docPath.length - 1].replaceAll("[._]", "") + "." + textName.replaceAll("[._]", "");
+			} else {
+				throw new PepperConvertException("Can't generate a valid document ID because the corpus path is invalid.");
+			}
+		}
 
-        xml.flush();
-        xml.close();
+		private void mapText(File textDir, STextualDS text) {
 
-      }
-      catch (IOException | XMLStreamException ex)
-      {
-        log.error("Could not create file \"data.xml\" for document " + getResourceURI(), ex);
-      }
-    }
+			try (
+					FileOutputStream dataXMLStream = new FileOutputStream(new File(textDir, "data.xml"))) {
+				XMLStreamWriter xml = outputFactory.createXMLStreamWriter(dataXMLStream, "UTF-8");
 
-    private void mapToken(File textDir, STextualDS text)
-    {
-      File baseDir = new File(textDir, "base");
-      if (!baseDir.exists())
-      {
-        if (!baseDir.exists() && !baseDir.mkdirs())
-        {
-          log.error("Can't create output folder for token file.");
-          return;
+				xml.writeStartDocument("UTF-8", "1.0");
+				xml.setDefaultNamespace(NS_URI);
 
-        }
-      }
-      try (FileOutputStream tokenXMLStream = new FileOutputStream(new File(baseDir, "token.xml")))
-      {
-        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
-        xml.writeStartDocument("UTF-8", "1.0");
-        xml.setDefaultNamespace(NS_URI);
+				xml.writeStartElement(NS_URI, "raw_text");
 
-        xml.writeStartElement(NS_URI, "layer");
-        xml.writeAttribute("docid", getDocID(text));
-        xml.writeAttribute("version", KORAP_VERSION);
+				xml.writeAttribute("docid", getDocID(text));
 
-        xml.writeStartElement(NS_URI, "spanList");
+				String textContent = text.getText();
 
-        getDocument().getDocumentGraph().getTextualRelations().forEach((textRel) ->
-        {
-          if (textRel.getTarget() == text)
-          {
-            SToken tok = textRel.getSource();
+				xml.writeStartElement(NS_URI, "text");
+				xml.writeCharacters(textContent);
+				xml.writeEndElement(); // end "text"
+				xml.writeEndElement(); // end "raw_text"
+				xml.writeEndDocument();
 
-            try
-            {
-              xml.writeStartElement(NS_URI, "span");
-              xml.writeAttribute("id", tok.getPath().fragment());
-              xml.writeAttribute("from", "" + textRel.getStart());
-              xml.writeAttribute("to", "" + textRel.getEnd());
-              xml.writeEndElement(); // end span
-            }
-            catch (XMLStreamException ex)
-            {
-              log.error("Could not map token " + tok.getId(), ex);
-            }
-          }
-        });
+				xml.flush();
+				xml.close();
 
-        xml.writeEndElement(); // end "spanList"
-        xml.writeEndElement(); // end "layer"
-        xml.writeEndDocument();
+			} catch (IOException | XMLStreamException ex) {
+				log.error("Could not create file \"data.xml\" for document " + getResourceURI(), ex);
+			}
+		}
 
-        xml.flush();
-        xml.close();
+		private void mapToken(File textDir, STextualDS text) {
+			File baseDir = new File(textDir, "base");
+			if (!baseDir.exists()) {
+				if (!baseDir.exists() && !baseDir.mkdirs()) {
+					log.error("Can't create output folder for token file.");
+					return;
 
-      }
-      catch (IOException | XMLStreamException ex)
-      {
-        log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
-      }
-    }
+				}
+			}
+			try (FileOutputStream tokenXMLStream = new FileOutputStream(new File(baseDir, "token.xml"))) {
+				XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
+				xml.writeStartDocument("UTF-8", "1.0");
+				xml.setDefaultNamespace(NS_URI);
 
-    private void mapSpans(File textDir, String foundry, String annoName,
-      List<SSpan> spans, STextualDS text)
-    {
-      if (spans == null || spans.isEmpty())
-      {
-        log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\"");
-        return;
-      }
+				xml.writeStartElement(NS_URI, "layer");
+				xml.writeAttribute("docid", getDocID(text));
+				xml.writeAttribute("version", KORAP_VERSION);
 
-      File foundryDir = new File(textDir, foundry);
-      if (!foundryDir.exists())
-      {
-        if (!foundryDir.exists() && !foundryDir.mkdirs())
-        {
-          log.error("Can't create output folder for foundry \"" + foundry + "\".");
-          return;
+				xml.writeStartElement(NS_URI, "spanList");
 
-        }
-      }
-      File outFile = new File(foundryDir, annoName + ".xml");
-      try (FileOutputStream tokenXMLStream = new FileOutputStream(outFile))
-      {
-        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
-        xml.writeStartDocument("UTF-8", "1.0");
-        xml.setDefaultNamespace(NS_URI);
+				getDocument().getDocumentGraph().getTextualRelations().forEach((textRel)
+						-> {
+					if (textRel.getTarget() == text) {
+						SToken tok = textRel.getSource();
 
-        xml.writeStartElement(NS_URI, "layer");
+						try {
+							xml.writeStartElement(NS_URI, "span");
+							xml.writeAttribute("id", tok.getPath().fragment());
+							xml.writeAttribute("from", "" + textRel.getStart());
+							xml.writeAttribute("to", "" + textRel.getEnd());
+							xml.writeEndElement(); // end span
+						} catch (XMLStreamException ex) {
+							log.error("Could not map token " + tok.getId(), ex);
+						}
+					}
+				});
 
-        xml.writeAttribute("docid", getDocID(text));
-        xml.writeAttribute("version", KORAP_VERSION);
+				xml.writeEndElement(); // end "spanList"
+				xml.writeEndElement(); // end "layer"
+				xml.writeEndDocument();
 
-        xml.writeStartElement(NS_URI, "spanList");
+				xml.flush();
+				xml.close();
 
-        spans.forEach((span) ->
-        {
+			} catch (IOException | XMLStreamException ex) {
+				log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
+			}
+		}
 
-          List<DataSourceSequence> sequences
-            = getDocument().getDocumentGraph().getOverlappedDataSourceSequence(span, SALT_TYPE.SSPANNING_RELATION,
-              SALT_TYPE.STEXT_OVERLAPPING_RELATION);
+		private void mapSpans(File textDir, String foundry, String annoName,
+				Collection<SSpan> spans, STextualDS text) {
+			if (spans == null || spans.isEmpty()) {
+				log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\" in text " + text.getId());
+				return;
+			}
 
-          if (sequences.size() == 1)
-          {
+			File foundryDir = new File(textDir, foundry);
+			if (!foundryDir.exists()) {
+				if (!foundryDir.exists() && !foundryDir.mkdirs()) {
+					log.error("Can't create output folder for foundry \"" + foundry + "\".");
+					return;
 
-            try
-            {
-              xml.writeStartElement(NS_URI, "span");
-              xml.writeAttribute("id", span.getPath().fragment());
-              xml.writeAttribute("from", "" + sequences.get(0).getStart());
-              xml.writeAttribute("to", "" + sequences.get(0).getEnd());
-              xml.writeEndElement(); // end span
-            }
-            catch (XMLStreamException ex)
-            {
-              log.error("Could not map span " + span.getId(), ex);
-            }
-          }
-          else
-          {
-            log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + span.getId());
-          }
+				}
+			}
+			File outFile = new File(foundryDir, annoName + ".xml");
+			try (FileOutputStream tokenXMLStream = new FileOutputStream(outFile)) {
+				XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
+				xml.writeStartDocument("UTF-8", "1.0");
+				xml.setDefaultNamespace(NS_URI);
 
-        });
+				xml.writeStartElement(NS_URI, "layer");
 
-        xml.writeEndElement(); // end "spanList"
-        xml.writeEndElement(); // end "layer"
-        xml.writeEndDocument();
+				xml.writeAttribute("docid", getDocID(text));
+				xml.writeAttribute("version", KORAP_VERSION);
 
-        xml.flush();
-        xml.close();
+				xml.writeStartElement(NS_URI, "spanList");
 
-      }
-      catch (IOException | XMLStreamException ex)
-      {
-        log.error("Could not create file \"" + foundry + "/" + annoName + ".xml\" for document " + getResourceURI(), ex);
-      }
+				spans.forEach((span)
+						-> {
 
-    }
+					List<DataSourceSequence> sequences
+							= getDocument().getDocumentGraph().getOverlappedDataSourceSequence(span, SALT_TYPE.SSPANNING_RELATION,
+									SALT_TYPE.STEXT_OVERLAPPING_RELATION);
 
-    /**
-     * Storing the corpus-structure once
-     */
-    @Override
-    public DOCUMENT_STATUS mapSCorpus()
-    {
-      List<SNode> roots = getCorpus().getGraph().getRoots();
-      if ((roots != null) && (!roots.isEmpty()))
-      {
-        if (getCorpus().equals(roots.get(0)))
-        {
+					if (sequences.size() == 1) {
+
+						try {
+							xml.writeStartElement(NS_URI, "span");
+							xml.writeAttribute("id", span.getPath().fragment());
+							xml.writeAttribute("from", "" + sequences.get(0).getStart());
+							xml.writeAttribute("to", "" + sequences.get(0).getEnd());
+							xml.writeEndElement(); // end span
+						} catch (XMLStreamException ex) {
+							log.error("Could not map span " + span.getId(), ex);
+						}
+					} else {
+						log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + span.getId());
+					}
+
+				});
+
+				xml.writeEndElement(); // end "spanList"
+				xml.writeEndElement(); // end "layer"
+				xml.writeEndDocument();
+
+				xml.flush();
+				xml.close();
+
+			} catch (IOException | XMLStreamException ex) {
+				log.error("Could not create file \"" + foundry + "/" + annoName + ".xml\" for document " + getResourceURI(), ex);
+			}
+
+		}
+
+		/**
+		 * Storing the corpus-structure once
+		 */
+		@Override
+		public DOCUMENT_STATUS mapSCorpus() {
+			List<SNode> roots = getCorpus().getGraph().getRoots();
+			if ((roots != null) && (!roots.isEmpty())) {
+				if (getCorpus().equals(roots.get(0))) {
 //          SaltUtil.save_DOT(getCorpus().getGraph(), getResourceURI());
-        }
-      }
+				}
+			}
 
-      return (DOCUMENT_STATUS.COMPLETED);
-    }
+			return (DOCUMENT_STATUS.COMPLETED);
+		}
 
-    @Override
-    public KorapXMLExporterProperties getProperties()
-    {
-      return (KorapXMLExporterProperties) super.getProperties();
-    }
+		@Override
+		public KorapXMLExporterProperties getProperties() {
+			return (KorapXMLExporterProperties) super.getProperties();
+		}
 
-  }
+	}
 
-  @Override
-  public void exportCorpusStructure()
-  {
-    // create the directory structure with a folder for each (sub-) corpus
-    super.exportCorpusStructure();
+	@Override
+	public void exportCorpusStructure() {
+		// create the directory structure with a folder for each (sub-) corpus
+		super.exportCorpusStructure();
 
-    // add a folder for each document
-    Collection<SCorpusGraph> corpGraphs = new LinkedList<>(this.getSaltProject().getCorpusGraphs());
-    corpGraphs.forEach((cg) ->
-    {
-      cg.getCorpusDocumentRelations().forEach((rel) ->
-      {
-        URI parentLocation = getIdentifier2ResourceTable().get(rel.getSource().getIdentifier());
-        File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName().replaceAll("[._]", ""));
-        if (docFolder.exists() || docFolder.mkdirs())
-        {
-          getIdentifier2ResourceTable().put(rel.getTarget().getIdentifier(),
-            URI.createFileURI(docFolder.getAbsolutePath()));
-        }
-        else
-        {
-          logger.error("Could not create output directory {}", docFolder.getAbsolutePath());
-        }
-      });
-    });
-  }
+		// add a folder for each document
+		Collection<SCorpusGraph> corpGraphs = new LinkedList<>(this.getSaltProject().getCorpusGraphs());
+		corpGraphs.forEach((cg)
+				-> {
+			cg.getCorpusDocumentRelations().forEach((rel)
+					-> {
+				URI parentLocation = getIdentifier2ResourceTable().get(rel.getSource().getIdentifier());
+				File docFolder = new File(parentLocation.toFileString(), rel.getTarget().getName().replaceAll("[._]", ""));
+				if (docFolder.exists() || docFolder.mkdirs()) {
+					getIdentifier2ResourceTable().put(rel.getTarget().getIdentifier(),
+							URI.createFileURI(docFolder.getAbsolutePath()));
+				} else {
+					logger.error("Could not create output directory {}", docFolder.getAbsolutePath());
+				}
+			});
+		});
+	}
 
-  // =================================================== optional
-  // ===================================================
-  /**
-   * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
-   *
-   * This method is called by the pepper framework after initializing this object and directly before start processing.
-   * Initializing means setting properties {@link PepperModuleProperties}, setting temporary files, resources etc. .
-   * returns false or throws an exception in case of {@link PepperModule} instance is not ready for any reason.
-   *
-   * @return false, {@link PepperModule} instance is not ready for any reason, true, else.
-   */
-  @Override
-  public boolean isReadyToStart() throws PepperModuleNotReadyException
-  {
-    // TODO make some initializations if necessary
-    return (super.isReadyToStart());
-  }
+	// =================================================== optional
+	// ===================================================
+	/**
+	 * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
+	 *
+	 * This method is called by the pepper framework after initializing this
+	 * object and directly before start processing. Initializing means setting
+	 * properties {@link PepperModuleProperties}, setting temporary files,
+	 * resources etc. . returns false or throws an exception in case of
+	 * {@link PepperModule} instance is not ready for any reason.
+	 *
+	 * @return false, {@link PepperModule} instance is not ready for any reason,
+	 * true, else.
+	 */
+	@Override
+	public boolean isReadyToStart() throws PepperModuleNotReadyException {
+		// TODO make some initializations if necessary
+		return (super.isReadyToStart());
+	}
 
 }

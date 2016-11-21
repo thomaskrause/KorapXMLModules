@@ -23,30 +23,26 @@ import org.corpus_tools.salt.util.SaltUtil;
  *
  * @author Thomas Krause <thomaskrause@posteo.de>
  */
-public class KorapXMLExporterProperties extends PepperModuleProperties
-{
+public class KorapXMLExporterProperties extends PepperModuleProperties {
 
-  public KorapXMLExporterProperties()
-  {
-    KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
-      "sentenceAnnotation", String.class,
-      "The sentence annotation used as \"base#sentences\" layer in KorapXML",
-      SaltUtil.SALT_NAMESPACE + "::" + SaltUtil.SEMANTICS_SENTENCE));
-    
-    KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
-      "paragraphAnnotation", String.class,
-      "The paragraph annotation used as \"base#paragraph\" layer in KorapXML",
-      SaltUtil.SALT_NAMESPACE + "::paragraph"));
-  }
+	public KorapXMLExporterProperties() {
+		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
+				"sentenceAnnotation", String.class,
+				"The sentence annotation used as \"base#sentences\" layer in KorapXML",
+				SaltUtil.SALT_NAMESPACE + "::" + SaltUtil.SEMANTICS_SENTENCE));
 
-  public String getSentenceAnnotationQName()
-  {
-    return ((PepperModuleProperty<String>) getProperty("sentenceAnnotation")).getValue();
-  }
-  
-  public String getParagraphAnnotationQName()
-  {
-    return ((PepperModuleProperty<String>) getProperty("paragraphAnnotation")).getValue();
-  }
+		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
+				"paragraphAnnotation", String.class,
+				"The paragraph annotation used as \"base#paragraph\" layer in KorapXML",
+				SaltUtil.SALT_NAMESPACE + "::paragraph"));
+	}
+
+	public String getSentenceAnnotationQName() {
+		return ((PepperModuleProperty<String>) getProperty("sentenceAnnotation")).getValue();
+	}
+
+	public String getParagraphAnnotationQName() {
+		return ((PepperModuleProperty<String>) getProperty("paragraphAnnotation")).getValue();
+	}
 
 }
