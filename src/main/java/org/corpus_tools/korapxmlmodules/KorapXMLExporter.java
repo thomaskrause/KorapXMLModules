@@ -2,12 +2,14 @@ package org.corpus_tools.korapxmlmodules;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Predicate;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
@@ -31,6 +33,7 @@ import org.corpus_tools.salt.common.SSpanningRelation;
 import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.common.STextualRelation;
 import org.corpus_tools.salt.common.SToken;
+import org.corpus_tools.salt.core.SAnnotation;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.core.SRelation;
 import org.corpus_tools.salt.graph.Identifier;
@@ -59,10 +62,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 	/**
 	 * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
 	 *
-	 * A constructor for your module. Set the coordinates, with which your
-	 * module shall be registered. The coordinates (modules name, version and
-	 * supported formats) are a kind of a fingerprint, which should make your
-	 * module unique.
+	 * A constructor for your module. Set the coordinates, with which your module shall be registered. The coordinates
+	 * (modules name, version and supported formats) are a kind of a fingerprint, which should make your module unique.
 	 */
 	public KorapXMLExporter() {
 		super();
@@ -84,9 +85,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 	/**
 	 * This method creates a {@link PepperMapper}. <br/>
-	 * In this dummy implementation an instance of {@link KorapXMLMapper} is
-	 * created and its location to where the document-structure should be
-	 * exported to is set.
+	 * In this dummy implementation an instance of {@link KorapXMLMapper} is created and its location to where the
+	 * document-structure should be exported to is set.
 	 */
 	@Override
 	public PepperMapper createPepperMapper(Identifier Identifier) {
@@ -112,8 +112,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 		}
 
 		/**
-		 * Stores each document-structure to location given by
-		 * {@link #getResourceURI()}.
+		 * Stores each document-structure to location given by {@link #getResourceURI()}.
 		 */
 		@Override
 		public DOCUMENT_STATUS mapSDocument() {
@@ -306,7 +305,10 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 							xml.writeAttribute("id", span.getPath().fragment());
 							xml.writeAttribute("from", "" + sequences.get(0).getStart());
 							xml.writeAttribute("to", "" + sequences.get(0).getEnd());
-							xml.writeEndElement(); // end span
+							
+							mapAnnotations(span.getAnnotations(), xml);
+							
+							xml.writeEndElement(); // </span>
 						} catch (XMLStreamException ex) {
 							log.error("Could not map span " + span.getId(), ex);
 						}
@@ -327,6 +329,28 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				log.error("Could not create file \"" + foundry + "/" + annoName + ".xml\" for document " + getResourceURI(), ex);
 			}
 
+		}
+
+		private void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
+			if (xml != null && annotations != null && !annotations.isEmpty()) {
+
+				// group the annotations by their namespace (this will become the type of the feature structure)
+				Multimap<String, SAnnotation> annosByNamspace
+						= Multimaps.index(annotations, anno -> anno.getNamespace() == null ? "" : anno.getNamespace());
+				// write a feature structure for each namespace
+				for (Map.Entry<String, Collection<SAnnotation>> entry : annosByNamspace.asMap().entrySet()) {
+					xml.writeStartElement(NS_URI, "fs");
+					xml.writeAttribute("type", entry.getKey());
+					for(SAnnotation anno : entry.getValue()) {
+						xml.writeStartElement(NS_URI, "f");
+						xml.writeAttribute("name", anno.getName());
+						xml.writeCharacters(anno.getValue_STEXT());
+						xml.writeEndElement(); // </f>
+					}
+					xml.writeEndElement(); // </fs>
+				}
+
+			}
 		}
 
 		/**
@@ -379,14 +403,12 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 	/**
 	 * <strong>OVERRIDE THIS METHOD FOR CUSTOMIZATION</strong>
 	 *
-	 * This method is called by the pepper framework after initializing this
-	 * object and directly before start processing. Initializing means setting
-	 * properties {@link PepperModuleProperties}, setting temporary files,
-	 * resources etc. . returns false or throws an exception in case of
-	 * {@link PepperModule} instance is not ready for any reason.
+	 * This method is called by the pepper framework after initializing this object and directly before start
+	 * processing. Initializing means setting properties {@link PepperModuleProperties}, setting temporary files,
+	 * resources etc. . returns false or throws an exception in case of {@link PepperModule} instance is not ready for
+	 * any reason.
 	 *
-	 * @return false, {@link PepperModule} instance is not ready for any reason,
-	 * true, else.
+	 * @return false, {@link PepperModule} instance is not ready for any reason, true, else.
 	 */
 	@Override
 	public boolean isReadyToStart() throws PepperModuleNotReadyException {
