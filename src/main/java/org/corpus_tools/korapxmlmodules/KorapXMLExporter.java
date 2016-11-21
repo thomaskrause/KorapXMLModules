@@ -6,16 +6,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.Collectors;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+import org.apache.commons.lang3.tuple.Pair;
 
 import org.corpus_tools.pepper.common.DOCUMENT_STATUS;
 import org.corpus_tools.pepper.common.PepperConfiguration;
@@ -38,6 +35,7 @@ import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.core.SRelation;
 import org.corpus_tools.salt.graph.Identifier;
 import org.corpus_tools.salt.util.DataSourceSequence;
+import org.corpus_tools.salt.util.SaltUtil;
 import org.eclipse.emf.common.util.URI;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
@@ -152,15 +150,20 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 				// map all sentence spans
 				Collection<SSpan> sentenceSpans = spansByAnnoQName
-						.get(getProperties().getSentenceAnnotationQName());
+						.removeAll(getProperties().getSentenceAnnotationQName());
 				mapSpans(textDir, "base", "sentences", sentenceSpans, text);
 
 				// map all paragraph spans
 				Collection<SSpan> paragraphSpans = spansByAnnoQName
-						.get(getProperties().getParagraphAnnotationQName());
+						.removeAll(getProperties().getParagraphAnnotationQName());
 				mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
 
-				// TODO: map all other spans
+				// map all other (remaining) spans grouped by their annotation name
+				spansByAnnoQName.asMap().forEach((annoQName, spans)
+						-> {
+					Pair<String, String> splittedAnno = SaltUtil.splitQName(annoQName);
+					mapSpans(textDir, splittedAnno.getLeft(), splittedAnno.getRight(), spans, text);
+				});
 			});
 
 			// workaround to deal with a bug in Salt
