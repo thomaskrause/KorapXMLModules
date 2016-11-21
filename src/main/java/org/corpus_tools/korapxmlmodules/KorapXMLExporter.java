@@ -4,9 +4,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import javax.xml.stream.XMLEventFactory;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -21,12 +24,15 @@ import org.corpus_tools.pepper.modules.PepperMapper;
 import org.corpus_tools.pepper.modules.PepperModule;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.exceptions.PepperModuleNotReadyException;
+import org.corpus_tools.salt.SALT_TYPE;
+import org.corpus_tools.salt.SaltFactory;
 import org.corpus_tools.salt.common.SCorpusGraph;
-import org.corpus_tools.salt.common.SDocument;
+import org.corpus_tools.salt.common.SSpan;
 import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.graph.Identifier;
+import org.corpus_tools.salt.util.DataSourceSequence;
 import org.eclipse.emf.common.util.URI;
 import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
@@ -43,9 +49,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 {
 
   private final static Logger log = LoggerFactory.getLogger(KorapXMLExporter.class);
-  
+
   public static final XMLOutputFactory outputFactory = XMLOutputFactory.newInstance();
-  
+
   // =================================================== mandatory
   // ===================================================
   /**
@@ -66,8 +72,11 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     setDocumentEnding("xml");
 
     setExportMode(EXPORT_MODE.CORPORA_ONLY);
-    
+
+    setProperties(new KorapXMLExporterProperties());
+
     outputFactory.setProperty(XMLOutputFactory.IS_REPAIRING_NAMESPACES, "true");
+
   }
 
   /**
@@ -89,7 +98,6 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     public static final String NS_URI = "http://ids-mannheim.de/ns/KorAP";
     public static final String KORAP_VERSION = "KorAP-0.4";
 
-    
     /**
      * Stores each document-structure to location given by {@link #getResourceURI()}.
      */
@@ -104,13 +112,39 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       getDocument().getDocumentGraph().getTextualDSs().forEach((text) ->
       {
         File textDir = new File(docDir, text.getName().replaceAll("[._]", ""));
-        if(!textDir.exists() && !textDir.mkdirs())
+        if (!textDir.exists() && !textDir.mkdirs())
         {
           throw new PepperConvertException("Can't create directory " + textDir.getAbsolutePath());
         }
         mapText(textDir, text);
         mapToken(textDir, text);
+
+        Map<String, Set<SSpan>> spansByAnnoQName = new HashMap<>();
         
+        DataSourceSequence<Integer> wholeTextSequence = new DataSourceSequence<>();
+        wholeTextSequence.setDataSource(text);
+        wholeTextSequence.setStart(text.getStart());
+        wholeTextSequence.setEnd(text.getEnd());
+        
+        String sentenceAnno = getProperties().getSentenceAnnotationQName();
+        
+        List<SSpan> spans = getDocument().getDocumentGraph().getSpansBySequence(wholeTextSequence);
+        
+        // TODO: filter spans by correct text
+        // map all sentence spans
+        List<SSpan> sentenceSpans = spans.parallelStream()
+          .filter(s -> s.getAnnotation(sentenceAnno) != null)
+          .collect(Collectors.toList());
+        mapSpans(textDir, "base", "sentences", sentenceSpans, text);
+
+        // map all paragraph spans
+        String paragraphAnno = getProperties().getParagraphAnnotationQName();
+        List<SSpan> paragraphSpans = spans.parallelStream()
+          .filter(s -> s.getAnnotation(paragraphAnno) != null)
+          .collect(Collectors.toList());
+        mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
+
+        // TODO: map all other spans
       });
 
       // workaround to deal with a bug in Salt
@@ -122,15 +156,15 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
       addProgress(1.0);
       return (DOCUMENT_STATUS.COMPLETED);
     }
-    
+
     private String getDocID(STextualDS text)
     {
       String textName = text.getName();
       String[] docPath = getDocument().getPath().segments();
-      
-      if(docPath.length >= 2)
+
+      if (docPath.length >= 2)
       {
-        return docPath[0].replaceAll("[._]", "") + "_" + docPath[docPath.length-1].replaceAll("[._]", "") + "." + textName.replaceAll("[._]", "");
+        return docPath[0].replaceAll("[._]", "") + "_" + docPath[docPath.length - 1].replaceAll("[._]", "") + "." + textName.replaceAll("[._]", "");
       }
       else
       {
@@ -140,7 +174,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
     private void mapText(File textDir, STextualDS text)
     {
-      
+
       try (
         FileOutputStream dataXMLStream = new FileOutputStream(new File(textDir, "data.xml")))
       {
@@ -148,22 +182,22 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
         xml.writeStartDocument("UTF-8", "1.0");
         xml.setDefaultNamespace(NS_URI);
-        
+
         xml.writeStartElement(NS_URI, "raw_text");
-        
+
         xml.writeAttribute("docid", getDocID(text));
-        
+
         String textContent = text.getText();
-        
+
         xml.writeStartElement(NS_URI, "text");
         xml.writeCharacters(textContent);
         xml.writeEndElement(); // end "text"
         xml.writeEndElement(); // end "raw_text"
         xml.writeEndDocument();
-        
+
         xml.flush();
         xml.close();
-        
+
       }
       catch (IOException | XMLStreamException ex)
       {
@@ -188,18 +222,18 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
         XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
         xml.writeStartDocument("UTF-8", "1.0");
         xml.setDefaultNamespace(NS_URI);
-        
+
         xml.writeStartElement(NS_URI, "layer");
         xml.writeAttribute("docid", getDocID(text));
         xml.writeAttribute("version", KORAP_VERSION);
-        
+
         xml.writeStartElement(NS_URI, "spanList");
-        
+
         getDocument().getDocumentGraph().getTextualRelations().forEach((textRel) ->
         {
-          if(textRel.getTarget() == text)
+          if (textRel.getTarget() == text)
           {
-          SToken tok = textRel.getSource();
+            SToken tok = textRel.getSource();
 
             try
             {
@@ -209,27 +243,103 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
               xml.writeAttribute("to", "" + textRel.getEnd());
               xml.writeEndElement(); // end span
             }
-            catch(XMLStreamException ex)
+            catch (XMLStreamException ex)
             {
               log.error("Could not map token " + tok.getId(), ex);
             }
           }
         });
-        
+
         xml.writeEndElement(); // end "spanList"
         xml.writeEndElement(); // end "layer"
         xml.writeEndDocument();
-        
+
         xml.flush();
         xml.close();
-        
-        
 
       }
       catch (IOException | XMLStreamException ex)
       {
         log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
       }
+    }
+
+    private void mapSpans(File textDir, String foundry, String annoName,
+      List<SSpan> spans, STextualDS text)
+    {
+      if (spans == null || spans.isEmpty())
+      {
+        log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\"");
+        return;
+      }
+
+      File foundryDir = new File(textDir, foundry);
+      if (!foundryDir.exists())
+      {
+        if (!foundryDir.exists() && !foundryDir.mkdirs())
+        {
+          log.error("Can't create output folder for foundry \"" + foundry + "\".");
+          return;
+
+        }
+      }
+      File outFile = new File(foundryDir, annoName + ".xml");
+      try (FileOutputStream tokenXMLStream = new FileOutputStream(outFile))
+      {
+        XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
+        xml.writeStartDocument("UTF-8", "1.0");
+        xml.setDefaultNamespace(NS_URI);
+
+        xml.writeStartElement(NS_URI, "layer");
+
+        xml.writeAttribute("docid", getDocID(text));
+        xml.writeAttribute("version", KORAP_VERSION);
+
+        xml.writeStartElement(NS_URI, "spanList");
+
+        spans.forEach((span) ->
+        {
+
+          List<DataSourceSequence> sequences
+            = getDocument().getDocumentGraph().getOverlappedDataSourceSequence(span, SALT_TYPE.SSPANNING_RELATION,
+              SALT_TYPE.STEXT_OVERLAPPING_RELATION);
+
+          if (sequences.size() == 1)
+          {
+
+            try
+            {
+              xml.writeStartElement(NS_URI, "span");
+              xml.writeAttribute("id", span.getPath().fragment());
+              xml.writeAttribute("from", "" + sequences.get(0).getStart());
+              xml.writeAttribute("to", "" + sequences.get(0).getEnd());
+              xml.writeEndElement(); // end span
+            }
+            catch (XMLStreamException ex)
+            {
+              log.error("Could not map span " + span.getId(), ex);
+            }
+          }
+          else
+          {
+            log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + span.getId());
+          }
+
+        });
+
+        xml.writeEndElement(); // end "spanList"
+        xml.writeEndElement(); // end "layer"
+        xml.writeEndDocument();
+
+        xml.flush();
+        xml.close();
+
+      }
+      catch (IOException | XMLStreamException ex)
+      {
+        log.error("Could not create file \"" + foundry + "/" + annoName + ".xml\" for document " + getResourceURI(), ex);
+      }
+
     }
 
     /**
@@ -249,6 +359,13 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
       return (DOCUMENT_STATUS.COMPLETED);
     }
+
+    @Override
+    public KorapXMLExporterProperties getProperties()
+    {
+      return (KorapXMLExporterProperties) super.getProperties();
+    }
+
   }
 
   @Override
@@ -295,4 +412,5 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
     // TODO make some initializations if necessary
     return (super.isReadyToStart());
   }
+
 }
