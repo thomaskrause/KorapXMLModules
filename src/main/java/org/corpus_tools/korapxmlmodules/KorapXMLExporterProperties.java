@@ -36,12 +36,12 @@ public class KorapXMLExporterProperties extends PepperModuleProperties {
 	
 	public KorapXMLExporterProperties() {
 		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
-				"sentenceAnnotation", String.class,
+				"base.sentence", String.class,
 				"The sentence annotation used as \"base#sentences\" layer in KorapXML",
 				SaltUtil.SALT_NAMESPACE + "::" + SaltUtil.SEMANTICS_SENTENCE));
 
 		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
-				"paragraphAnnotation", String.class,
+				"base.paragraph", String.class,
 				"The paragraph annotation used as \"base#paragraph\" layer in KorapXML",
 				SaltUtil.SALT_NAMESPACE + "::paragraph"));
 
@@ -51,11 +51,11 @@ public class KorapXMLExporterProperties extends PepperModuleProperties {
 	}
 
 	public String getSentenceAnnotationQName() {
-		return ((PepperModuleProperty<String>) getProperty("sentenceAnnotation")).getValue();
+		return ((PepperModuleProperty<String>) getProperty("base.sentence")).getValue();
 	}
 
 	public String getParagraphAnnotationQName() {
-		return ((PepperModuleProperty<String>) getProperty("paragraphAnnotation")).getValue();
+		return ((PepperModuleProperty<String>) getProperty("base.paragraph")).getValue();
 	}
 	
 	public Map<String, Foundry> getFoundryMapping() {
