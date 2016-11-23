@@ -1,5 +1,6 @@
 package org.corpus_tools.korapxmlmodules;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
@@ -11,6 +12,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.logging.Level;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
@@ -135,12 +137,12 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				mapToken(textDir, text);
 
 				foundryMapping.entries().forEach(e -> {
-					if("_all_".equals(e.getKey())) {
+					if ("_all_".equals(e.getKey())) {
 						e.getValue().map(textDir, getDocument().getDocumentGraph().getNodes(), text, getProperties());
 					} else {
 						List<SLayer> layerList = getDocument().getDocumentGraph().getLayerByName(e.getKey());
-						if(layerList != null) {
-							for(SLayer layer : layerList) {
+						if (layerList != null) {
+							for (SLayer layer : layerList) {
 								e.getValue().map(textDir, layer.getNodes(), text, getProperties());
 							}
 						}
@@ -178,15 +180,18 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				xml.writeStartDocument("UTF-8", "1.0");
 				xml.setDefaultNamespace(NS_URI);
 
+				indent(0, xml);
 				xml.writeStartElement(NS_URI, "raw_text");
 
 				xml.writeAttribute("docid", getDocID(text));
 
 				String textContent = text.getText();
 
+				indent(1, xml);
 				xml.writeStartElement(NS_URI, "text");
 				xml.writeCharacters(textContent);
 				xml.writeEndElement(); // end "text"
+				indent(0, xml);
 				xml.writeEndElement(); // end "raw_text"
 				xml.writeEndDocument();
 
@@ -195,6 +200,14 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 			} catch (IOException | XMLStreamException ex) {
 				log.error("Could not create file \"data.xml\" for document " + getResourceURI(), ex);
+			}
+		}
+
+		protected final void indent(int nr, XMLStreamWriter xml) {
+			try {
+				xml.writeCharacters("\n" + Strings.repeat("\t", nr));
+			} catch (XMLStreamException ex) {
+				java.util.logging.Logger.getLogger(Foundry.class.getName()).log(Level.SEVERE, null, ex);
 			}
 		}
 
@@ -212,10 +225,13 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				xml.writeStartDocument("UTF-8", "1.0");
 				xml.setDefaultNamespace(NS_URI);
 
+				indent(0, xml);
 				xml.writeStartElement(NS_URI, "layer");
 				xml.writeAttribute("docid", getDocID(text));
 				xml.writeAttribute("version", KORAP_VERSION);
 
+				
+				indent(1, xml);
 				xml.writeStartElement(NS_URI, "spanList");
 
 				getDocument().getDocumentGraph().getTextualRelations().forEach((textRel)
@@ -224,6 +240,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 						SToken tok = textRel.getSource();
 
 						try {
+							indent(2, xml);
 							xml.writeStartElement(NS_URI, "span");
 							xml.writeAttribute("id", tok.getPath().fragment());
 							xml.writeAttribute("from", "" + textRel.getStart());
@@ -235,7 +252,9 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 					}
 				});
 
+				indent(1, xml);
 				xml.writeEndElement(); // end "spanList"
+				indent(0, xml);
 				xml.writeEndElement(); // end "layer"
 				xml.writeEndDocument();
 
