@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 import org.corpus_tools.korapxmlmodules.KorapXMLExporterProperties;
 import org.corpus_tools.salt.common.SSpan;
 import org.corpus_tools.salt.common.STextualDS;
-import org.corpus_tools.salt.core.SLayer;
 import org.corpus_tools.salt.core.SNode;
 
 /**
