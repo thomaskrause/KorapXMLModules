@@ -16,9 +16,10 @@
 package org.corpus_tools.korapxmlmodules;
 
 import com.google.common.base.Splitter;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.TreeMultimap;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
 import org.corpus_tools.korapxmlmodules.foundries.Foundry;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
 import org.corpus_tools.pepper.modules.PepperModuleProperty;
@@ -44,22 +45,40 @@ public class KorapXMLExporterProperties extends PepperModuleProperties {
 				"base.paragraph", String.class,
 				"The paragraph annotation used as \"base#paragraph\" layer in KorapXML",
 				SaltUtil.SALT_NAMESPACE + "::paragraph"));
+		
+		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
+				"treetagger.lemma", String.class,
+				"The lemma annotation used as \"TreeTagger#paragraph\" layer in KorapXML",
+				SaltUtil.SALT_NAMESPACE + "::" +  SaltUtil.SEMANTICS_LEMMA));
+		
+		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
+				"treetagger.pos", String.class,
+				"The part of speech annotation used as \"TreeTagger#ctag\" layer in KorapXML",
+				SaltUtil.SALT_NAMESPACE + "::" +  SaltUtil.SEMANTICS_POS));
 
 		KorapXMLExporterProperties.this.addProperty(new PepperModuleProperty<>(
 				"foundryMapping", String.class,
 				"Maps a layer to a foundry.", ""));
 	}
 
-	public String getSentenceAnnotationQName() {
+	public String getBaseSentence() {
 		return ((PepperModuleProperty<String>) getProperty("base.sentence")).getValue();
 	}
 
-	public String getParagraphAnnotationQName() {
+	public String getBaseParagraph() {
 		return ((PepperModuleProperty<String>) getProperty("base.paragraph")).getValue();
 	}
 	
-	public Map<String, Foundry> getFoundryMapping() {
-		Map<String, Foundry> result = new TreeMap<>();
+	public String getTreeTaggerLemma() {
+		return ((PepperModuleProperty<String>) getProperty("treetagger.lemma")).getValue();
+	}
+	
+	public String getTreeTaggerPOS() {
+		return ((PepperModuleProperty<String>) getProperty("treetagger.pos")).getValue();
+	}
+	
+	public Multimap<String, Foundry> getFoundryMapping() {
+		Multimap<String, Foundry> result = HashMultimap.create();
 		
 		String raw = ((PepperModuleProperty<String>) getProperty("foundryMapping")).getValue();
 		if(raw != null && !raw.isEmpty()) {

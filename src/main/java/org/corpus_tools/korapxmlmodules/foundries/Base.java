@@ -16,12 +16,14 @@
 package org.corpus_tools.korapxmlmodules.foundries;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.corpus_tools.korapxmlmodules.KorapXMLExporterProperties;
 import org.corpus_tools.salt.common.SSpan;
 import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.core.SLayer;
+import org.corpus_tools.salt.core.SNode;
 
 /**
  *
@@ -30,23 +32,23 @@ import org.corpus_tools.salt.core.SLayer;
 public class Base extends Foundry {
 
 	@Override
-	public void map(File textDir, SLayer layer, STextualDS text, KorapXMLExporterProperties properties) {
-		
-		List<SSpan> layerSpans = 
-		layer.getNodes().parallelStream().filter(SSpan.class::isInstance)
-				.map(n -> (SSpan) n)
-				.collect(Collectors.toList());
-		
-		String sentenceAnnotationQName = properties.getSentenceAnnotationQName();
+	public void map(File textDir, Collection<SNode> nodes, STextualDS text, KorapXMLExporterProperties properties) {
+
+		List<SSpan> layerSpans
+				= nodes.parallelStream().filter(SSpan.class::isInstance)
+						.map(n -> (SSpan) n)
+						.collect(Collectors.toList());
+
+		String sentenceAnnotationQName = properties.getBaseSentence();
 		List<SSpan> sentenceSpans = layerSpans.parallelStream()
 				.filter(span -> span.getAnnotation(sentenceAnnotationQName) != null)
 				.collect(Collectors.toList());
-		
-		String paragraphAnnotationQName = properties.getParagraphAnnotationQName();
+
+		String paragraphAnnotationQName = properties.getBaseParagraph();
 		List<SSpan> paragraphSpans = layerSpans.parallelStream()
 				.filter(span -> span.getAnnotation(paragraphAnnotationQName) != null)
 				.collect(Collectors.toList());
-		
+
 		// map all sentence spans
 		mapSpans(textDir, "base", "sentences", sentenceSpans, text);
 

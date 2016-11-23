@@ -16,9 +16,14 @@
 package org.corpus_tools.korapxmlmodules.foundries;
 
 import java.io.File;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.corpus_tools.korapxmlmodules.KorapXMLExporterProperties;
+import org.corpus_tools.salt.common.SSpan;
 import org.corpus_tools.salt.common.STextualDS;
-import org.corpus_tools.salt.core.SLayer;
+import org.corpus_tools.salt.common.SToken;
+import org.corpus_tools.salt.core.SNode;
 
 /**
  *
@@ -27,8 +32,22 @@ import org.corpus_tools.salt.core.SLayer;
 public class TreeTagger extends Foundry {
 
 	@Override
-	public void map(File textDir, SLayer layer, STextualDS text, KorapXMLExporterProperties properties) {
-		throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+	public void map(File textDir, Collection<SNode> nodes, STextualDS text, KorapXMLExporterProperties properties) {
+
+		String lemmaQName = properties.getTreeTaggerLemma();
+		String posQName = properties.getTreeTaggerPOS();
+
+		List<SToken> tokenWithAnno
+				= nodes.parallelStream().filter(SToken.class::isInstance)
+						.map(n -> (SToken) n)
+						.filter(tok -> 
+						{
+								return tok.getAnnotation(lemmaQName) != null || tok.getAnnotation(posQName) != null;
+						})
+						.collect(Collectors.toList());
+
+		mapSpans(textDir, "tree_tagger", "morpho", tokenWithAnno, text);
+
 	}
-	
+
 }

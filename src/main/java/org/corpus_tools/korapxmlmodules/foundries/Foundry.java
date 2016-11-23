@@ -31,10 +31,10 @@ import static org.corpus_tools.korapxmlmodules.KorapXMLExporter.outputFactory;
 import org.corpus_tools.korapxmlmodules.KorapXMLExporterProperties;
 import org.corpus_tools.pepper.exceptions.PepperConvertException;
 import org.corpus_tools.salt.SALT_TYPE;
-import org.corpus_tools.salt.common.SSpan;
+import org.corpus_tools.salt.common.SStructuredNode;
 import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.core.SAnnotation;
-import org.corpus_tools.salt.core.SLayer;
+import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.util.DataSourceSequence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +47,7 @@ public abstract class Foundry {
 	
 	private static final Logger log = LoggerFactory.getLogger(Foundry.class);
 	
-	public abstract void map(File textDir, SLayer layer, STextualDS text, KorapXMLExporterProperties properties);
+	public abstract void map(File textDir, Collection<SNode> nodes, STextualDS text, KorapXMLExporterProperties properties);
 	
 	protected String getDocID(STextualDS text) {
 			String textName = text.getName();
@@ -61,8 +61,8 @@ public abstract class Foundry {
 		}
 	
 	protected void mapSpans(File textDir, String foundry, String annoName,
-				Collection<SSpan> spans, STextualDS text) {
-			if (spans == null || spans.isEmpty()) {
+				Collection<? extends SStructuredNode> nodes, STextualDS text) {
+			if (nodes == null || nodes.isEmpty()) {
 				log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\" in text " + text.getId());
 				return;
 			}
@@ -88,29 +88,29 @@ public abstract class Foundry {
 
 				xml.writeStartElement(NS_URI, "spanList");
 
-				spans.forEach((span)
+				nodes.forEach((node)
 						-> {
 
 					List<DataSourceSequence> sequences
-							= text.getGraph().getOverlappedDataSourceSequence(span, SALT_TYPE.SSPANNING_RELATION,
+							= text.getGraph().getOverlappedDataSourceSequence(node, SALT_TYPE.SSPANNING_RELATION,
 									SALT_TYPE.STEXT_OVERLAPPING_RELATION);
 
 					if (sequences.size() == 1) {
 
 						try {
 							xml.writeStartElement(NS_URI, "span");
-							xml.writeAttribute("id", span.getPath().fragment());
+							xml.writeAttribute("id", node.getPath().fragment());
 							xml.writeAttribute("from", "" + sequences.get(0).getStart());
 							xml.writeAttribute("to", "" + sequences.get(0).getEnd());
 
-							mapAnnotations(span.getAnnotations(), xml);
+							mapAnnotations(node.getAnnotations(), xml);
 
 							xml.writeEndElement(); // </span>
 						} catch (XMLStreamException ex) {
-							log.error("Could not map span " + span.getId(), ex);
+							log.error("Could not map span " + node.getId(), ex);
 						}
 					} else {
-						log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + span.getId());
+						log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + node.getId());
 					}
 
 				});
@@ -144,6 +144,36 @@ public abstract class Foundry {
 						xml.writeCharacters(anno.getValue_STEXT());
 						xml.writeEndElement(); // </f>
 					}
+					xml.writeEndElement(); // </fs>
+				}
+
+			}
+		}
+		
+		private void mapWrappedAnnotations(Collection<SAnnotation> annotations, String type, XMLStreamWriter xml) throws XMLStreamException {
+			if (xml != null && annotations != null && !annotations.isEmpty()) {
+
+				// group the annotations by their namespace (this will become the type of the feature structure)
+				Multimap<String, SAnnotation> annosByNamspace
+						= Multimaps.index(annotations, anno -> anno.getNamespace() == null ? "" : anno.getNamespace());
+				// write a feature structure for each namespace
+				for (Map.Entry<String, Collection<SAnnotation>> entry : annosByNamspace.asMap().entrySet()) {
+					
+					xml.writeStartElement(NS_URI, "fs");
+					xml.writeAttribute("type", type);
+					xml.writeStartElement(NS_URI, "f");
+					xml.writeStartElement("name", type);
+					
+					xml.writeStartElement(NS_URI, "fs");
+					xml.writeAttribute("type", entry.getKey());
+					for (SAnnotation anno : entry.getValue()) {
+						xml.writeStartElement(NS_URI, "f");
+						xml.writeAttribute("name", anno.getName());
+						xml.writeCharacters(anno.getValue_STEXT());
+						xml.writeEndElement(); // </f>
+					}
+					xml.writeEndElement(); // </fs>
+					xml.writeEndElement(); // </f>
 					xml.writeEndElement(); // </fs>
 				}
 

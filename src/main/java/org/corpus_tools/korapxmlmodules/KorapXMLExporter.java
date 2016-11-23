@@ -123,7 +123,7 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 			File docDir = new File(getResourceURI().toFileString());
 
-			Map<String, Foundry> foundryMapping = getProperties().getFoundryMapping();
+			Multimap<String, Foundry> foundryMapping = getProperties().getFoundryMapping();
 
 			getDocument().getDocumentGraph().getTextualDSs().forEach((text)
 					-> {
@@ -134,11 +134,15 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				mapText(textDir, text);
 				mapToken(textDir, text);
 
-				foundryMapping.forEach((layerName, foundry) -> {
-					List<SLayer> layerList = getDocument().getDocumentGraph().getLayerByName(layerName);
-					if(layerList != null) {
-						for(SLayer layer : layerList) {
-							foundry.map(textDir, layer, text, getProperties());
+				foundryMapping.entries().forEach(e -> {
+					if("_all_".equals(e.getKey())) {
+						e.getValue().map(textDir, getDocument().getDocumentGraph().getNodes(), text, getProperties());
+					} else {
+						List<SLayer> layerList = getDocument().getDocumentGraph().getLayerByName(e.getKey());
+						if(layerList != null) {
+							for(SLayer layer : layerList) {
+								e.getValue().map(textDir, layer.getNodes(), text, getProperties());
+							}
 						}
 					}
 				});
