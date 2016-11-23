@@ -157,7 +157,6 @@ public abstract class Foundry {
 						indent(4, xml);
 						xml.writeStartElement(NS_URI, "f");
 						xml.writeAttribute("name", anno.getName());
-						indent(4, xml);
 						xml.writeEndElement(); // </f>
 					}
 					indent(3, xml);
@@ -192,7 +191,6 @@ public abstract class Foundry {
 						xml.writeStartElement(NS_URI, "f");
 						xml.writeAttribute("name", anno.getName());
 						xml.writeCharacters(anno.getValue_STEXT());
-						indent(6, xml);
 						xml.writeEndElement(); // </f>
 					}
 					indent(5, xml);
