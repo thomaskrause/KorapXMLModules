@@ -61,7 +61,8 @@ public abstract class Foundry {
 		}
 	
 	protected void mapSpans(File textDir, String foundry, String annoName,
-				Collection<? extends SStructuredNode> nodes, STextualDS text) {
+				Collection<? extends SStructuredNode> nodes,
+				STextualDS text) {
 			if (nodes == null || nodes.isEmpty()) {
 				log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\" in text " + text.getId());
 				return;
@@ -127,8 +128,12 @@ public abstract class Foundry {
 			}
 
 		}
+	
+		public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
+			mapDirectAnnotations(annotations, xml);
+		}
 
-		private void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
+		protected final void mapDirectAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
 			if (xml != null && annotations != null && !annotations.isEmpty()) {
 
 				// group the annotations by their namespace (this will become the type of the feature structure)
@@ -150,7 +155,7 @@ public abstract class Foundry {
 			}
 		}
 		
-		private void mapWrappedAnnotations(Collection<SAnnotation> annotations, String type, XMLStreamWriter xml) throws XMLStreamException {
+		protected final void mapWrappedAnnotations(Collection<SAnnotation> annotations, String type, XMLStreamWriter xml) throws XMLStreamException {
 			if (xml != null && annotations != null && !annotations.isEmpty()) {
 
 				// group the annotations by their namespace (this will become the type of the feature structure)
@@ -162,7 +167,7 @@ public abstract class Foundry {
 					xml.writeStartElement(NS_URI, "fs");
 					xml.writeAttribute("type", type);
 					xml.writeStartElement(NS_URI, "f");
-					xml.writeStartElement("name", type);
+					xml.writeAttribute("name", type);
 					
 					xml.writeStartElement(NS_URI, "fs");
 					xml.writeAttribute("type", entry.getKey());
