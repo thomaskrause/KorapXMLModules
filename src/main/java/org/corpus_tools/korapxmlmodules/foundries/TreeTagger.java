@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import org.corpus_tools.korapxmlmodules.KorapXMLExporterProperties;
-import org.corpus_tools.salt.common.SSpan;
 import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SAnnotation;
@@ -46,13 +45,16 @@ public class TreeTagger extends Foundry {
 						.filter(tok -> tok.getAnnotation(lemmaQName) != null || tok.getAnnotation(posQName) != null)
 						.collect(Collectors.toList());
 
-		mapSpans(textDir, "tree_tagger", "morpho", tokenWithAnno, text);
+		mapSpans(textDir, "tree_tagger", "morpho", tokenWithAnno, text, properties);
 
 	}
 
 	@Override
-	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
-		mapWrappedAnnotations(annotations, "lex", xml);
+	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml, KorapXMLExporterProperties props) throws XMLStreamException {
+		List<SAnnotation> filteredAnnos = annotations.stream().filter(anno -> 
+				anno.getQName().equals(props.getTreeTaggerLemma()) || anno.getQName().equals(props.getTreeTaggerPOS()))
+				.collect(Collectors.toList());
+		mapWrappedAnnotations(filteredAnnos, "lex", xml);
 	}
 	
 	

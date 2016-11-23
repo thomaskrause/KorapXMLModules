@@ -64,7 +64,7 @@ public abstract class Foundry {
 
 	protected void mapSpans(File textDir, String foundry, String annoName,
 			Collection<? extends SStructuredNode> nodes,
-			STextualDS text) {
+			STextualDS text, KorapXMLExporterProperties props) {
 		if (nodes == null || nodes.isEmpty()) {
 			log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\" in text " + text.getId());
 			return;
@@ -109,7 +109,7 @@ public abstract class Foundry {
 						xml.writeAttribute("from", "" + sequences.get(0).getStart());
 						xml.writeAttribute("to", "" + sequences.get(0).getEnd());
 
-						mapAnnotations(node.getAnnotations(), xml);
+						mapAnnotations(node.getAnnotations(), xml, props);
 
 						indent(2, xml);
 						xml.writeEndElement(); // </span>
@@ -137,7 +137,7 @@ public abstract class Foundry {
 
 	}
 
-	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
+	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml, KorapXMLExporterProperties props) throws XMLStreamException {
 		mapDirectAnnotations(annotations, xml);
 	}
 

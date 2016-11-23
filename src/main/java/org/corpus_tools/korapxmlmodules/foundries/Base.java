@@ -49,10 +49,10 @@ public class Base extends Foundry {
 				.collect(Collectors.toList());
 
 		// map all sentence spans
-		mapSpans(textDir, "base", "sentences", sentenceSpans, text);
+		mapSpans(textDir, "base", "sentences", sentenceSpans, text, properties);
 
 		// map all paragraph spans
-		mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
+		mapSpans(textDir, "base", "paragraph", paragraphSpans, text, properties);
 	}
 
 }
