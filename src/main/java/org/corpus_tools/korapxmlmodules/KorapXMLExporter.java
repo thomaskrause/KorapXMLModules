@@ -15,6 +15,7 @@ import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import org.apache.commons.lang3.tuple.Pair;
+import org.corpus_tools.korapxmlmodules.foundries.Foundry;
 
 import org.corpus_tools.pepper.common.DOCUMENT_STATUS;
 import org.corpus_tools.pepper.common.PepperConfiguration;
@@ -34,6 +35,7 @@ import org.corpus_tools.salt.common.STextualDS;
 import org.corpus_tools.salt.common.STextualRelation;
 import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SAnnotation;
+import org.corpus_tools.salt.core.SLayer;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.core.SRelation;
 import org.corpus_tools.salt.graph.Identifier;
@@ -121,6 +123,8 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 			File docDir = new File(getResourceURI().toFileString());
 
+			Map<String, Foundry> foundryMapping = getProperties().getFoundryMapping();
+
 			getDocument().getDocumentGraph().getTextualDSs().forEach((text)
 					-> {
 				File textDir = new File(docDir, text.getName().replaceAll("[._]", ""));
@@ -130,39 +134,15 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 				mapText(textDir, text);
 				mapToken(textDir, text);
 
-				DataSourceSequence<Integer> wholeTextSequence = new DataSourceSequence<>();
-				wholeTextSequence.setDataSource(text);
-				wholeTextSequence.setStart(text.getStart());
-				wholeTextSequence.setEnd(text.getEnd());
-
-				Predicate<? super SRelation> textRelConnectedToText
-						= rel -> rel instanceof STextualRelation && rel.getTarget() == text;
-				Predicate<? super SRelation> spanRelConnectedToText
-						= rel -> rel instanceof SSpanningRelation
-						&& ((SSpanningRelation) rel).getTarget().getOutRelations().stream().anyMatch(textRelConnectedToText);
-
-				Multimap<String, SSpan> spansByAnnoQName = HashMultimap.create();
-
-				getDocument().getDocumentGraph().getSpans().parallelStream()
-						.filter(span -> span.getOutRelations().stream().anyMatch(spanRelConnectedToText))
-						.forEach(span -> span.getAnnotations().forEach(anno -> spansByAnnoQName.put(anno.getQName(), span)));
-
-				// map all sentence spans
-				Collection<SSpan> sentenceSpans = spansByAnnoQName
-						.removeAll(getProperties().getSentenceAnnotationQName());
-				mapSpans(textDir, "base", "sentences", sentenceSpans, text);
-
-				// map all paragraph spans
-				Collection<SSpan> paragraphSpans = spansByAnnoQName
-						.removeAll(getProperties().getParagraphAnnotationQName());
-				mapSpans(textDir, "base", "paragraph", paragraphSpans, text);
-
-				// map all other (remaining) spans grouped by their annotation name
-				spansByAnnoQName.asMap().forEach((annoQName, spans)
-						-> {
-					Pair<String, String> splittedAnno = SaltUtil.splitQName(annoQName);
-					mapSpans(textDir, splittedAnno.getLeft(), splittedAnno.getRight(), spans, text);
+				foundryMapping.forEach((layerName, foundry) -> {
+					List<SLayer> layerList = getDocument().getDocumentGraph().getLayerByName(layerName);
+					if(layerList != null) {
+						for(SLayer layer : layerList) {
+							foundry.map(textDir, layer, text, getProperties());
+						}
+					}
 				});
+
 			});
 
 			// workaround to deal with a bug in Salt
@@ -260,96 +240,6 @@ public class KorapXMLExporter extends PepperExporterImpl implements PepperExport
 
 			} catch (IOException | XMLStreamException ex) {
 				log.error("Could not create file \"base/token.xml\" for document " + getResourceURI(), ex);
-			}
-		}
-
-		private void mapSpans(File textDir, String foundry, String annoName,
-				Collection<SSpan> spans, STextualDS text) {
-			if (spans == null || spans.isEmpty()) {
-				log.warn("Nothing to map for span layer \"" + foundry + "#" + annoName + "\" in text " + text.getId());
-				return;
-			}
-
-			File foundryDir = new File(textDir, foundry);
-			if (!foundryDir.exists()) {
-				if (!foundryDir.exists() && !foundryDir.mkdirs()) {
-					log.error("Can't create output folder for foundry \"" + foundry + "\".");
-					return;
-
-				}
-			}
-			File outFile = new File(foundryDir, annoName + ".xml");
-			try (FileOutputStream tokenXMLStream = new FileOutputStream(outFile)) {
-				XMLStreamWriter xml = outputFactory.createXMLStreamWriter(tokenXMLStream, "UTF-8");
-				xml.writeStartDocument("UTF-8", "1.0");
-				xml.setDefaultNamespace(NS_URI);
-
-				xml.writeStartElement(NS_URI, "layer");
-
-				xml.writeAttribute("docid", getDocID(text));
-				xml.writeAttribute("version", KORAP_VERSION);
-
-				xml.writeStartElement(NS_URI, "spanList");
-
-				spans.forEach((span)
-						-> {
-
-					List<DataSourceSequence> sequences
-							= getDocument().getDocumentGraph().getOverlappedDataSourceSequence(span, SALT_TYPE.SSPANNING_RELATION,
-									SALT_TYPE.STEXT_OVERLAPPING_RELATION);
-
-					if (sequences.size() == 1) {
-
-						try {
-							xml.writeStartElement(NS_URI, "span");
-							xml.writeAttribute("id", span.getPath().fragment());
-							xml.writeAttribute("from", "" + sequences.get(0).getStart());
-							xml.writeAttribute("to", "" + sequences.get(0).getEnd());
-							
-							mapAnnotations(span.getAnnotations(), xml);
-							
-							xml.writeEndElement(); // </span>
-						} catch (XMLStreamException ex) {
-							log.error("Could not map span " + span.getId(), ex);
-						}
-					} else {
-						log.warn("Invalid size " + sequences.size() + " of data source sequences for span " + span.getId());
-					}
-
-				});
-
-				xml.writeEndElement(); // end "spanList"
-				xml.writeEndElement(); // end "layer"
-				xml.writeEndDocument();
-
-				xml.flush();
-				xml.close();
-
-			} catch (IOException | XMLStreamException ex) {
-				log.error("Could not create file \"" + foundry + "/" + annoName + ".xml\" for document " + getResourceURI(), ex);
-			}
-
-		}
-
-		private void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml) throws XMLStreamException {
-			if (xml != null && annotations != null && !annotations.isEmpty()) {
-
-				// group the annotations by their namespace (this will become the type of the feature structure)
-				Multimap<String, SAnnotation> annosByNamspace
-						= Multimaps.index(annotations, anno -> anno.getNamespace() == null ? "" : anno.getNamespace());
-				// write a feature structure for each namespace
-				for (Map.Entry<String, Collection<SAnnotation>> entry : annosByNamspace.asMap().entrySet()) {
-					xml.writeStartElement(NS_URI, "fs");
-					xml.writeAttribute("type", entry.getKey());
-					for(SAnnotation anno : entry.getValue()) {
-						xml.writeStartElement(NS_URI, "f");
-						xml.writeAttribute("name", anno.getName());
-						xml.writeCharacters(anno.getValue_STEXT());
-						xml.writeEndElement(); // </f>
-					}
-					xml.writeEndElement(); // </fs>
-				}
-
 			}
 		}
 
