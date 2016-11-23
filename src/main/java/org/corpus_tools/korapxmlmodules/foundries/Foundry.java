@@ -15,6 +15,7 @@
  */
 package org.corpus_tools.korapxmlmodules.foundries;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
 import java.io.File;
@@ -23,6 +24,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import static org.corpus_tools.korapxmlmodules.KorapXMLExporter.KorapXMLMapper.KORAP_VERSION;
@@ -82,11 +84,12 @@ public abstract class Foundry {
 				xml.writeStartDocument("UTF-8", "1.0");
 				xml.setDefaultNamespace(NS_URI);
 
+				indent(0, xml);
 				xml.writeStartElement(NS_URI, "layer");
-
 				xml.writeAttribute("docid", getDocID(text));
 				xml.writeAttribute("version", KORAP_VERSION);
-
+				
+				indent(1, xml);
 				xml.writeStartElement(NS_URI, "spanList");
 
 				nodes.forEach((node)
@@ -99,13 +102,16 @@ public abstract class Foundry {
 					if (sequences.size() == 1) {
 
 						try {
+
+							indent(2, xml);
 							xml.writeStartElement(NS_URI, "span");
 							xml.writeAttribute("id", node.getPath().fragment());
 							xml.writeAttribute("from", "" + sequences.get(0).getStart());
 							xml.writeAttribute("to", "" + sequences.get(0).getEnd());
-
+							
 							mapAnnotations(node.getAnnotations(), xml);
 
+							indent(2, xml);
 							xml.writeEndElement(); // </span>
 						} catch (XMLStreamException ex) {
 							log.error("Could not map span " + node.getId(), ex);
@@ -116,7 +122,9 @@ public abstract class Foundry {
 
 				});
 
+				indent(1, xml);
 				xml.writeEndElement(); // end "spanList"
+				indent(0, xml);
 				xml.writeEndElement(); // end "layer"
 				xml.writeEndDocument();
 
@@ -141,14 +149,18 @@ public abstract class Foundry {
 						= Multimaps.index(annotations, anno -> anno.getNamespace() == null ? "" : anno.getNamespace());
 				// write a feature structure for each namespace
 				for (Map.Entry<String, Collection<SAnnotation>> entry : annosByNamspace.asMap().entrySet()) {
+					
+					indent(3, xml);
 					xml.writeStartElement(NS_URI, "fs");
 					xml.writeAttribute("type", entry.getKey());
 					for (SAnnotation anno : entry.getValue()) {
+						indent(4, xml);
 						xml.writeStartElement(NS_URI, "f");
 						xml.writeAttribute("name", anno.getName());
-						xml.writeCharacters(anno.getValue_STEXT());
+						indent(4, xml);
 						xml.writeEndElement(); // </f>
 					}
+					indent(3, xml);
 					xml.writeEndElement(); // </fs>
 				}
 
@@ -164,24 +176,41 @@ public abstract class Foundry {
 				// write a feature structure for each namespace
 				for (Map.Entry<String, Collection<SAnnotation>> entry : annosByNamspace.asMap().entrySet()) {
 					
+					indent(3, xml);
 					xml.writeStartElement(NS_URI, "fs");
 					xml.writeAttribute("type", type);
+					
+					indent(4, xml);
 					xml.writeStartElement(NS_URI, "f");
 					xml.writeAttribute("name", type);
 					
+					indent(5, xml);
 					xml.writeStartElement(NS_URI, "fs");
 					xml.writeAttribute("type", entry.getKey());
 					for (SAnnotation anno : entry.getValue()) {
+						indent(6, xml);
 						xml.writeStartElement(NS_URI, "f");
 						xml.writeAttribute("name", anno.getName());
 						xml.writeCharacters(anno.getValue_STEXT());
+						indent(6, xml);
 						xml.writeEndElement(); // </f>
 					}
+					indent(5, xml);
 					xml.writeEndElement(); // </fs>
+					indent(4, xml);
 					xml.writeEndElement(); // </f>
+					indent(3, xml);
 					xml.writeEndElement(); // </fs>
 				}
 
 			}
+		}
+		
+		protected final void indent(int nr, XMLStreamWriter xml) {
+		try {
+			xml.writeCharacters("\n" + Strings.repeat("\t", nr));
+		} catch (XMLStreamException ex) {
+			java.util.logging.Logger.getLogger(Foundry.class.getName()).log(Level.SEVERE, null, ex);
+		}
 		}
 }
