@@ -18,7 +18,6 @@ package org.corpus_tools.korapxmlmodules;
 import com.google.common.base.Splitter;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.TreeMultimap;
 import java.util.List;
 import org.corpus_tools.korapxmlmodules.foundries.Foundry;
 import org.corpus_tools.pepper.modules.PepperModuleProperties;
