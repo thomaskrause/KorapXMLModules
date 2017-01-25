@@ -35,8 +35,10 @@ import org.corpus_tools.pepper.exceptions.PepperConvertException;
 import org.corpus_tools.salt.SALT_TYPE;
 import org.corpus_tools.salt.common.SStructuredNode;
 import org.corpus_tools.salt.common.STextualDS;
+import org.corpus_tools.salt.common.SToken;
 import org.corpus_tools.salt.core.SAnnotation;
 import org.corpus_tools.salt.core.SNode;
+import org.corpus_tools.salt.core.SRelation;
 import org.corpus_tools.salt.util.DataSourceSequence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,6 +112,7 @@ public abstract class Foundry {
 						xml.writeAttribute("to", "" + sequences.get(0).getEnd());
 
 						mapAnnotations(node.getAnnotations(), xml, props);
+						mapRelations(node, xml, props);
 
 						indent(2, xml);
 						xml.writeEndElement(); // </span>
@@ -136,6 +139,28 @@ public abstract class Foundry {
 		}
 
 	}
+	
+	protected void mapRelation(SRelation<?,?> rel, 
+			String label, String tokenFile,
+			XMLStreamWriter xml, KorapXMLExporterProperties props)
+		throws XMLStreamException {
+		
+		indent(3, xml);
+		xml.writeStartElement(NS_URI, "rel");
+		xml.writeAttribute("label", label);
+		String target = rel.getTarget().getPath().fragment();
+		if(rel.getTarget() instanceof SToken) {
+			// the token in in another file
+			target = tokenFile + "#" + target;
+		}
+		xml.writeAttribute("target", target);
+		xml.writeEndElement();
+	}
+	
+	public void mapRelations(SStructuredNode node, XMLStreamWriter xml, KorapXMLExporterProperties props)
+		throws XMLStreamException {
+		// default is not to map any relation
+	}
 
 	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml, KorapXMLExporterProperties props) throws XMLStreamException {
 		mapDirectAnnotations(annotations, xml);
@@ -157,6 +182,7 @@ public abstract class Foundry {
 					indent(4, xml);
 					xml.writeStartElement(NS_URI, "f");
 					xml.writeAttribute("name", anno.getName());
+					xml.writeCharacters(anno.getValue_STEXT());
 					xml.writeEndElement(); // </f>
 				}
 				indent(3, xml);
