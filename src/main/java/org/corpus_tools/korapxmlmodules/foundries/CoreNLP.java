@@ -26,6 +26,8 @@ import org.corpus_tools.salt.common.SDominanceRelation;
 import org.corpus_tools.salt.common.SStructure;
 import org.corpus_tools.salt.common.SStructuredNode;
 import org.corpus_tools.salt.common.STextualDS;
+import org.corpus_tools.salt.common.SToken;
+import org.corpus_tools.salt.core.SAnnotation;
 import org.corpus_tools.salt.core.SNode;
 import org.corpus_tools.salt.core.SRelation;
 
@@ -38,6 +40,14 @@ public class CoreNLP extends Foundry {
 	@Override
 	public void map(File textDir, Collection<SNode> nodes, STextualDS text, KorapXMLExporterProperties properties) {
 
+		List<SToken> tokenWithPosAnno
+				= nodes.parallelStream().filter(SToken.class::isInstance)
+						.map(n -> (SToken) n)
+						.filter(tok ->  tok.getAnnotation(null, "pos") != null)
+						.collect(Collectors.toList());
+
+		mapSpans(textDir, "corenlp", "morpho", tokenWithPosAnno, text, properties);
+		
 		List<SStructure> layerStructs
 				= nodes.parallelStream().filter(SStructure.class::isInstance)
 						.map(n -> (SStructure) n)
@@ -45,6 +55,22 @@ public class CoreNLP extends Foundry {
 
 		mapSpans(textDir, "corenlp", "constituency", layerStructs, text, properties);
 
+	}
+	
+	@Override
+	public void mapAnnotations(Collection<SAnnotation> annotations, XMLStreamWriter xml, KorapXMLExporterProperties props) throws XMLStreamException {
+		
+		List<SAnnotation> filteredMorphAnnos = annotations.stream().filter(anno -> 
+				"pos".equals(anno.getName()))
+				.collect(Collectors.toList());
+		
+		List<SAnnotation> filteredConstAnnos = annotations.stream().filter(anno -> 
+				"cat".equals(anno.getName()))
+				.collect(Collectors.toList());
+		
+		
+		mapWrappedAnnotations(filteredMorphAnnos, "lex", xml);
+		mapDirectAnnotations(filteredConstAnnos, xml);
 	}
 
 	@Override
